@@ -15,3 +15,4 @@ Metric: **RMSE** (lower is better; Kaggle scores √MSE). Always report **groupe
 | 2026-07-11 | gr_offset_v1 | calibrated mean-GR typewell lookup, α=0.16 σ=100 | 15.581 | — | ✓ | 2.1% over ffill; best standalone model |
 | 2026-07-11 | ensemble_v1 | 0.25×kalman + 0.75×offset | 15.565 | — | ✓ | 2.2% over ffill; best overall |
 | 2026-07-12 | level_regression_v1 | Ridge on per-well level offset (v50,v200,gr_off,eval_len,known_range) | 15.266 | — | ✓ | **best**; 4.0% over ffill, grouped 5-fold CV. EDA: level=68% of error budget; wiggle ~unpredictable |
+| 2026-07-12 | ncc_lightgbm_v1 | HistGBM per-row on NCC+trajectory+azimuth+tortuosity feats | 15.247 | — | ~ | ties level_regression; top feat=z_from_ps. NCC standalone=21.7 (quasi-periodic aliasing). Public LB (4.86) = 3 leaked wells, not representative |
