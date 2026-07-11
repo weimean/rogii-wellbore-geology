@@ -14,6 +14,12 @@ which TVT makes the horizontal GR line up with a reference.
 - **Schema** — `horizontal_well.csv`: `MD, X, Y, Z, ANCC, ASTNU, ASTNL, EGFDU, EGFDL, BUDA,
   TVT, GR, TVT_input` · `typewell.csv`: `TVT, GR, Geology` · `sample_submission.csv`: `id, tvt`.
   Formation-top columns (ANCC…BUDA) and `TVT` are **train-only**.
+- **⭐ The `.png` cross-sections are TRAIN-ONLY** (verified 2026-07-12 against the official
+  Kaggle file listing: 773 train `.png`, **0 test `.png`**). Test wells ship only the two
+  CSVs. ⇒ Images **cannot** be an inference-time feature for the submission. Their useful
+  content (formation-dip curves) is rendered from train-only formation tops, which are
+  also unavailable at test and already shown not to predict the eval offset. Image route
+  is a **dead end for prediction** — revise any note that calls it "promising".
 - **Submission = eval-zone rows only.** `id = {WELL}_{positional_row_index}`, rows where
   `TVT_input` is NaN. Sample = 14,151 rows across 3 wells. Verified our builder's id set
   matches sample exactly.

@@ -55,5 +55,8 @@ trajectory-based level/trend. Signed azimuth (az_cos) contributes, matching myca
 - The GBM feature scaffold is a foundation if we later get a *real* signal (e.g. bed dip
   from the .png cross-sections, or a proper Q-3D tortuosity).
 - Do NOT chase the public LB — trust the 773-well GroupKFold CV.
-- Highest-leverage remaining idea unchanged: extract structural dip from the cross-section
-  images to sharpen the LEVEL (the 68% component), which no tabular feature predicts well.
+- ~~Extract structural dip from the cross-section images~~ — **ruled out 2026-07-12**: the
+  `.png` images are train-only (0 test images per the official file listing), so they can't
+  be an inference-time feature. See eda-findings. The LEVEL (68% component) must be improved
+  from test-available data only (X, Y, Z, GR, typewell) — and every method so far plateaus
+  at CV ≈ 15.2. The problem may simply be near its achievable ceiling with these inputs.
