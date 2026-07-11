@@ -17,25 +17,26 @@ import pandas as pd
 import yaml
 
 from .data import TARGET_INPUT, load_split, submission_id
-from .model import baseline_ffill, baseline_linear_interp
+from .model import baseline_ffill, baseline_linear_interp, kalman_gr
 
-PREDICTORS = {
+SIMPLE_PREDICTORS = {
     "ffill": baseline_ffill,
     "linear_interp": baseline_linear_interp,
 }
 
+WELL_PREDICTORS = {
+    "kalman_gr": kalman_gr,
+}
+
 
 def build_submission(test_dir: Path, predictor_name: str) -> pd.DataFrame:
-    """One row per EVALUATION-ZONE point only.
-
-    Verified against sample_submission.csv: ids are ``{WELL}_{row_index}`` where
-    row_index is the 0-based positional index within the horizontal_well.csv, and only
-    rows with NaN ``TVT_input`` (the eval zone) are scored/submitted.
-    """
-    predictor = PREDICTORS[predictor_name]
+    """One row per EVALUATION-ZONE point only."""
     rows: list[dict] = []
     for well in load_split(test_dir):
-        preds = predictor(well.horizontal)
+        if predictor_name in WELL_PREDICTORS:
+            preds = WELL_PREDICTORS[predictor_name](well)
+        else:
+            preds = SIMPLE_PREDICTORS[predictor_name](well.horizontal)
         eval_mask = well.eval_mask.to_numpy()
         for row_index, (pred, is_eval) in enumerate(zip(preds, eval_mask)):
             if is_eval:
