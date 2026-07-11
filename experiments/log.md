@@ -1,7 +1,8 @@
 # Experiment Log (terse, code-side)
 
-Append one line per run while working. The richer narrative + decisions live in the
-Obsidian vault note `04 Projects/Kaggle — ROGII Wellbore Geology Prediction.md`.
+One line per *run* (quantitative ledger). The per-*approach* narrative
+(idea→validation→conclusion) lives in `notes/approaches/NN-*.md`; milestone verdicts get
+distilled up into the vault note `04 Projects/Kaggle — ROGII Wellbore Geology Prediction.md`.
 
 Metric: **RMSE** (lower is better; Kaggle scores √MSE). Always report **grouped CV** (by WELLNAME).
 
