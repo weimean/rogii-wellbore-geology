@@ -196,3 +196,99 @@ def ensemble_kalman_offset(
     p_kalman = kalman_gr(well)
     p_offset = gr_offset_search(well)
     return w_kalman * p_kalman + w_offset * p_offset
+
+
+# --- Level regression --------------------------------------------------------
+# EDA (notes/approaches/03) showed the eval-zone error is 68% LEVEL (which constant
+# depth), 15% trend, 18% wiggle. Predicting the per-well level offset directly beats
+# GR-wiggle matching. The offset (eval_mean - last_known) responds to pre-PS TVT
+# velocity + a GR-match signal; a Ridge model recovers ~10% of its variance.
+
+LEVEL_FEATURES = ["v50", "v200", "gr_off", "eval_len", "known_range"]
+
+
+def _gr_offset_raw(well: Well, gr_sigma: float = 100.0, max_offset: float = 30.0) -> float:
+    """Raw best TVT offset from calibrated mean-GR typewell matching (no damping)."""
+    h = well.horizontal
+    t = well.typewell
+    known = h[h[TARGET_INPUT].notna()]
+    evz = h[h[TARGET_INPUT].isna()]
+    if len(known) == 0 or len(evz) == 0:
+        return 0.0
+    last_tvt = float(known[TARGET_INPUT].iloc[-1])
+
+    tw_tvt = t["TVT"].values
+    tw_gr_smooth = gaussian_filter1d(t["GR"].values, sigma=3)
+    tw_gr_fn = interp1d(tw_tvt, tw_gr_smooth, kind="linear", bounds_error=False, fill_value=np.nan)
+    a_cal, b_cal = _calibrate_gr(known, tw_gr_fn)
+
+    gr_smooth = _smooth_gr(h, gr_sigma)
+    if np.all(np.isnan(gr_smooth)):
+        return 0.0
+    eval_gr_mean = gr_smooth[evz.index.values].mean()
+
+    best_mse, best_off = np.inf, 0.0
+    for off in np.linspace(-max_offset, max_offset, 121):
+        tw_gr_cand = tw_gr_fn(last_tvt + off)
+        if np.isnan(tw_gr_cand):
+            continue
+        mse = (eval_gr_mean - (a_cal * tw_gr_cand + b_cal)) ** 2
+        if mse < best_mse:
+            best_mse, best_off = mse, off
+    return float(best_off)
+
+
+def extract_level_features(well: Well) -> dict:
+    """Per-well features for the level offset. Uses only known zone + typewell,
+    so it is identical between train and test (no leakage)."""
+    h = well.horizontal
+    known = h[h[TARGET_INPUT].notna()]
+    kt = known[TARGET_INPUT].values
+    n = len(kt)
+    w50 = min(50, n - 1)
+    w200 = min(200, n - 1)
+    return {
+        "v50": (kt[-1] - kt[-1 - w50]) / w50 if w50 > 0 else 0.0,
+        "v200": (kt[-1] - kt[-1 - w200]) / w200 if w200 > 0 else 0.0,
+        "gr_off": _gr_offset_raw(well),
+        "eval_len": int(well.eval_mask.sum()),
+        "known_range": float(np.nanmax(kt) - np.nanmin(kt)),
+    }
+
+
+def fit_level_model(train_wells: list[Well], alpha: float = 1.0):
+    """Fit a Ridge model predicting the eval-zone offset (eval_mean - last_known)."""
+    from sklearn.linear_model import Ridge
+
+    X, y = [], []
+    for w in train_wells:
+        h = w.horizontal
+        known = h[h[TARGET_INPUT].notna()]
+        evz = h[w.eval_mask]
+        if len(evz) < 5 or len(known) < 200:
+            continue
+        feats = extract_level_features(w)
+        X.append([feats[k] for k in LEVEL_FEATURES])
+        y.append(float(evz["TVT"].mean()) - float(known[TARGET_INPUT].iloc[-1]))
+    return Ridge(alpha=alpha).fit(np.asarray(X), np.asarray(y))
+
+
+def level_regression(well: Well, model, shape_weight: float = 0.0) -> np.ndarray:
+    """Predict a constant-per-well level (last_known + Ridge offset), optionally
+    adding a fraction of the Kalman within-zone shape."""
+    h = well.horizontal
+    known = h[h[TARGET_INPUT].notna()]
+    last_tvt = float(known[TARGET_INPUT].iloc[-1])
+
+    feats = extract_level_features(well)
+    x = np.asarray([[feats[k] for k in LEVEL_FEATURES]])
+    offset = float(model.predict(x)[0])
+
+    preds = baseline_ffill(h).astype(float)
+    em = well.eval_mask.to_numpy()
+    preds[em] = last_tvt + offset
+
+    if shape_weight > 0:
+        kal = kalman_gr(well)
+        preds[em] += shape_weight * (kal[em] - kal[em].mean())
+    return preds

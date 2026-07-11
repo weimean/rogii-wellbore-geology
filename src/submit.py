@@ -17,7 +17,15 @@ import pandas as pd
 import yaml
 
 from .data import TARGET_INPUT, load_split, submission_id
-from .model import baseline_ffill, baseline_linear_interp, kalman_gr, gr_offset_search, ensemble_kalman_offset
+from .model import (
+    baseline_ffill,
+    baseline_linear_interp,
+    kalman_gr,
+    gr_offset_search,
+    ensemble_kalman_offset,
+    fit_level_model,
+    level_regression,
+)
 
 SIMPLE_PREDICTORS = {
     "ffill": baseline_ffill,
@@ -30,13 +38,25 @@ WELL_PREDICTORS = {
     "ensemble": ensemble_kalman_offset,
 }
 
+# Predictors that must be FIT on the training split before predicting on test.
+TRAINED_PREDICTORS = {"level_regression"}
 
-def build_submission(test_dir: Path, predictor_name: str) -> pd.DataFrame:
+
+def build_submission(test_dir: Path, predictor_name: str, train_dir: Path | None = None) -> pd.DataFrame:
     """One row per EVALUATION-ZONE point only."""
+    pred_fn = None
+    if predictor_name in TRAINED_PREDICTORS:
+        if train_dir is None:
+            raise ValueError(f"{predictor_name} needs a train_dir to fit on")
+        model = fit_level_model(load_split(train_dir))
+        pred_fn = lambda well: level_regression(well, model)  # noqa: E731
+    elif predictor_name in WELL_PREDICTORS:
+        pred_fn = WELL_PREDICTORS[predictor_name]
+
     rows: list[dict] = []
     for well in load_split(test_dir):
-        if predictor_name in WELL_PREDICTORS:
-            preds = WELL_PREDICTORS[predictor_name](well)
+        if pred_fn is not None:
+            preds = pred_fn(well)
         else:
             preds = SIMPLE_PREDICTORS[predictor_name](well.horizontal)
         eval_mask = well.eval_mask.to_numpy()
@@ -53,10 +73,11 @@ def main() -> None:
 
     cfg = yaml.safe_load(args.config.read_text())
     test_dir = Path(cfg["data"]["test_dir"])
+    train_dir = Path(cfg["data"].get("train_dir", "data/raw/train"))
     out_path = Path(cfg["output"]["submission_path"])
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    sub = build_submission(test_dir, cfg["model"]["predictor"])
+    sub = build_submission(test_dir, cfg["model"]["predictor"], train_dir=train_dir)
     sub.to_csv(out_path, index=False)
     print(f"Wrote {len(sub):,} rows -> {out_path}")
 

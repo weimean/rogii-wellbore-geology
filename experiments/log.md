@@ -14,3 +14,4 @@ Metric: **RMSE** (lower is better; Kaggle scores √MSE). Always report **groupe
 | 2026-07-11 | kalman_gr_v1 | EKF tracking TVT via typewell GR + 1.42ft bias | 15.735 | — | ✓ | 1.1% over ffill (15.910); GR→TVT signal weak (SNR~0.03), beats ffill on 51% of wells |
 | 2026-07-11 | gr_offset_v1 | calibrated mean-GR typewell lookup, α=0.16 σ=100 | 15.581 | — | ✓ | 2.1% over ffill; best standalone model |
 | 2026-07-11 | ensemble_v1 | 0.25×kalman + 0.75×offset | 15.565 | — | ✓ | 2.2% over ffill; best overall |
+| 2026-07-12 | level_regression_v1 | Ridge on per-well level offset (v50,v200,gr_off,eval_len,known_range) | 15.266 | — | ✓ | **best**; 4.0% over ffill, grouped 5-fold CV. EDA: level=68% of error budget; wiggle ~unpredictable |

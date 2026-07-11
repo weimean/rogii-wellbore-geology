@@ -34,7 +34,10 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 - Per-approach narrative in `notes/approaches/NN-name.md` (idea → validation → conclusion).
 - Manage deps with `uv sync`; run with `uv run python -m src.submit --config <cfg>`.
 
-## What's been done
-- Pipeline verified end-to-end (data → predict → submit). Baseline = ffill / linear_interp
-  (both degenerate to flat last-known TVT since eval zone is a tail, not an interior gap).
-- Next: GR cross-correlation alignment (self-correlation first, then typewell).
+## What's been done (best CV RMSE in parens; ffill=15.910)
+- Baselines: ffill / linear_interp (flat last-known TVT).
+- Kalman GR + GR offset search + ensemble (15.558) — GR-wiggle matching, marginal.
+- **level_regression (15.266, current best)** — EDA reframed the task: eval-zone error is
+  68% LEVEL / 15% trend / 18% wiggle. TVT is a bounded mean-reverting drift (geosteering).
+  Ridge predicts per-well offset from pre-PS velocity + GR match. See notes/approaches/03.
+- Next: richer LEVEL features (the .png cross-sections encode bed dip). Wiggle is ~unpredictable.
