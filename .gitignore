@@ -1,11 +1,12 @@
 # --- Competition data (never commit — redistribution violates comp rules) ---
-data/
+# Ignore the *contents* not the directory, so README/.gitkeep can be re-included.
+data/*
 !data/README.md
 
 # --- Models & outputs ---
-models/
+models/*
 !models/.gitkeep
-outputs/
+outputs/*
 !outputs/.gitkeep
 
 # --- Python / uv ---
