@@ -9,3 +9,4 @@ Metric: **MSE** (lower is better). Always report **grouped CV** (by WELLNAME).
 |------|--------|--------|--------|--------|-------|-------|
 | 2026-07-11 | baseline_ffill | carry last known TVT forward | — | — | ? | pipeline smoke test |
 | 2026-07-11 | baseline_linear_interp | interpolate TVT over gap by MD | — | — | ? | honest floor to beat |
+| 2026-07-11 | baseline_linear_interp | interpolate TVT over gap by MD | — | — | floor | eval zone = well tail → degenerates to constant last-known TVT; pipeline verified vs sample_submission |
