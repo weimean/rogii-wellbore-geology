@@ -67,8 +67,31 @@ calibration errors.
 ## 8. Conclusion
 Aggregating GR over the full eval zone (heavy smoothing + mean matching) extracts more
 reliable signal than point-by-point or sequence-level approaches. The improvement ceiling
-is ~2-3% via this approach family. Next directions:
-- Try matching eval-zone GR against known-zone GR (self-correlation) instead of typewell
-- Multi-scale offset search (different σ values per well based on eval zone length)
-- Neural sequence models that can learn the GR→TVT mapping from cross-well training data
-- Image-based features from the .png cross-sections
+is ~2-3% via this approach family.
+
+## 9. Domain knowledge investigation (2026-07-12)
+
+Systematic exploration of unused domain signals. None broke through the ~2% ceiling.
+
+| Domain insight | Test | Result | Why it fails |
+|---|---|---|---|
+| Formation dip (TVT vs X,Y linear fit from known zone tail) | Extrapolate TVT in eval zone | 149 RMSE (diverges) | Extrap ratio 8-12x; dip at PS boundary ≠ eval zone dip |
+| Dip from horiz distance + clipping | Cap drift at ±10-30 ft | Doesn't beat ffill | Clipped dip adds noise without improving mean |
+| Azimuth (computed from X,Y trajectory) | Correlate with TVT offset/slope | r=0.066 / 0.004 | Wells drill many azimuths in similar geology |
+| Structural offset (actual TVT − typewell TVT at formation crossings) | Predict eval offset | Offsets vary wildly per formation (+19 to +93 in one well) | Well-typewell mismatch at shallow formations ≠ deep |
+| Formation identification (GR → formation → TVT mid-point) | Constant pred per well | 12.66 vs 12.85 ffill (1.5%) | Eval zone spans <1 formation; redundant with GR offset |
+| Self-correlation offset (known-zone GR profile instead of typewell) | Same search as GR offset | 12.85 ≈ ffill | Self-profile and typewell give similar signal at mean level |
+| Formation boundary clipping | Post-process ensemble | No effect | Only 7/773 wells violate ±2-formation bounds |
+| Spatial NN (5 nearest wells by X,Y) | Predict TVT offset | r=0.061 | TVT offset not spatially correlated at this scale |
+| dTVT/dHoriz in known zone → eval slope | Correlation | r=0.020 | Dip regime changes at PS boundary |
+
+**Physical explanation:** Eval zone wells run nearly along strike (parallel to
+formation layers). TVT changes 10-50 ft over thousands of lateral feet. The per-step
+GR signal from these tiny TVT changes is SNR ≈ 0.02 — too weak for any matching
+strategy. The dip that drives the residual can't be estimated from the known zone
+(different well geometry) or from neighbors (not spatially correlated).
+
+**Most promising untapped signal:** the .png cross-section images. The lower-left panel
+shows formation boundary curves whose slope = apparent dip along the well direction.
+This is the exact quantity needed to predict the eval-zone TVT trend. Extracting it
+requires image processing (line detection on the formation curves).
