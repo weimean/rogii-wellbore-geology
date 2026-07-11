@@ -17,7 +17,7 @@ import pandas as pd
 import yaml
 
 from .data import TARGET_INPUT, load_split, submission_id
-from .model import baseline_ffill, baseline_linear_interp, kalman_gr
+from .model import baseline_ffill, baseline_linear_interp, kalman_gr, gr_offset_search, ensemble_kalman_offset
 
 SIMPLE_PREDICTORS = {
     "ffill": baseline_ffill,
@@ -26,6 +26,8 @@ SIMPLE_PREDICTORS = {
 
 WELL_PREDICTORS = {
     "kalman_gr": kalman_gr,
+    "gr_offset": gr_offset_search,
+    "ensemble": ensemble_kalman_offset,
 }
 
 

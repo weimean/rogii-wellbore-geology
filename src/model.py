@@ -96,3 +96,103 @@ def kalman_gr(
         preds[idx] = w * kalman_preds[idx] + (1 - w) * last_tvt + bias
 
     return preds
+
+
+def _calibrate_gr(known: pd.DataFrame, tw_gr_fn) -> tuple[float, float]:
+    """Learn horizontal_GR ≈ a * typewell_GR + b from known zone."""
+    known_with_gr = known.dropna(subset=["GR", TARGET_INPUT])
+    if len(known_with_gr) < 50:
+        return 1.0, 0.0
+    tw_at = tw_gr_fn(known_with_gr[TARGET_INPUT].values)
+    valid = ~np.isnan(tw_at)
+    if valid.sum() < 20:
+        return 1.0, 0.0
+    return tuple(np.polyfit(tw_at[valid], known_with_gr["GR"].values[valid], 1))
+
+
+def _smooth_gr(h: pd.DataFrame, sigma: float) -> np.ndarray:
+    """Interpolate GR NaNs and Gaussian-smooth."""
+    gr = h["GR"].values.copy()
+    valid = ~np.isnan(gr)
+    if valid.sum() < 20:
+        return np.full(len(gr), np.nan)
+    gr_interp = np.interp(np.arange(len(gr)), np.where(valid)[0], gr[valid])
+    return gaussian_filter1d(gr_interp, sigma=sigma)
+
+
+def gr_offset_search(
+    well: Well,
+    n_segments: int = 1,
+    gr_sigma: float = 100.0,
+    alpha: float = 0.16,
+    bias: float = 1.42,
+    max_offset: float = 30.0,
+) -> np.ndarray:
+    """Find per-segment TVT offset by matching mean GR against calibrated typewell.
+
+    Divides the eval zone into segments, finds the typewell TVT whose calibrated GR
+    best matches each segment's mean GR, applies a damped offset (alpha), and
+    interpolates smoothly across the eval zone.
+    """
+    h = well.horizontal
+    t = well.typewell
+    known = h[h[TARGET_INPUT].notna()]
+    evz = h[h[TARGET_INPUT].isna()]
+    last_tvt = float(known[TARGET_INPUT].iloc[-1])
+
+    tw_tvt = t["TVT"].values
+    tw_gr_smooth = gaussian_filter1d(t["GR"].values, sigma=3)
+    tw_gr_fn = interp1d(tw_tvt, tw_gr_smooth, kind="linear", bounds_error=False, fill_value=np.nan)
+
+    a_cal, b_cal = _calibrate_gr(known, tw_gr_fn)
+
+    gr_smooth = _smooth_gr(h, gr_sigma)
+    if np.all(np.isnan(gr_smooth)):
+        return baseline_ffill(h)
+
+    eval_idx = evz.index.values
+    n_eval = len(eval_idx)
+    seg_size = max(1, n_eval // n_segments)
+
+    offsets = np.linspace(-max_offset, max_offset, 121)
+    seg_results = []
+    seg_centers = []
+
+    for i in range(n_segments):
+        start = i * seg_size
+        end = min((i + 1) * seg_size, n_eval) if i < n_segments - 1 else n_eval
+        seg_idx = eval_idx[start:end]
+        seg_gr_mean = gr_smooth[seg_idx].mean()
+        seg_centers.append(float(h.loc[seg_idx[len(seg_idx) // 2], "MD"]))
+
+        best_mse, best_off = np.inf, 0.0
+        for off in offsets:
+            tw_gr_cand = tw_gr_fn(last_tvt + off)
+            if np.isnan(tw_gr_cand):
+                continue
+            mse = (seg_gr_mean - (a_cal * tw_gr_cand + b_cal)) ** 2
+            if mse < best_mse:
+                best_mse = mse
+                best_off = off
+        seg_results.append(alpha * best_off)
+
+    eval_md = evz["MD"].values
+    offset_fn = interp1d(
+        seg_centers, seg_results, kind="linear",
+        bounds_error=False, fill_value=(seg_results[0], seg_results[-1]),
+    )
+
+    preds = baseline_ffill(h).copy().astype(float)
+    preds[eval_idx] = last_tvt + offset_fn(eval_md) + bias
+    return preds
+
+
+def ensemble_kalman_offset(
+    well: Well,
+    w_kalman: float = 0.25,
+    w_offset: float = 0.75,
+) -> np.ndarray:
+    """Weighted blend of Kalman GR tracker and piecewise GR offset search."""
+    p_kalman = kalman_gr(well)
+    p_offset = gr_offset_search(well)
+    return w_kalman * p_kalman + w_offset * p_offset
