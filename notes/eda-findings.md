@@ -43,6 +43,23 @@ which TVT makes the horizontal GR line up with a reference.
 - **Offset-well dip prior (slides 10–13):** dips behave similarly in neighbouring wells;
   drilling azimuth affects expected dip. X/Y neighbours give a prior on TVT drift direction.
 
+## Insights from the train `.png` cross-sections (2026-07-12, understanding-only — images are train-only)
+Examined the well-path/formation panel (bottom-left) + GR-alignment panels (right):
+- **Beds are smooth, gently-dipping, near-parallel regional surfaces.** The offset sign is
+  set by well-path-vs-bed geometry: along-bed steering → tiny offset (e.g. 000d7d20, −5);
+  crossing beds up-section → large offset (e.g. 03a935ae, −31).
+- **At the *true* TVT, horizontal GR aligns almost perfectly with the typewell GR** — the
+  wiggle signal is real; the only obstacle is blind alignment (quasi-periodic ⇒ aliasing).
+- **Structural datum `D = TVT + Z` is smooth** (std 8–33 ft vs TVT's 100–293 ft) — confirms
+  TVT ≈ −Z + D(X,Y) geologically. BUT all three predictors built on it FAIL:
+  per-well D(X,Y) extrapolation (103 RMSE), constant-datum TVT=last−α·dZ (best α≈0.02≈ffill),
+  regional KNN datum surface (158 RMSE).
+- **Root cause = within-lateral Z–TVT decoupling** (matches mycarta): in the eval zone the
+  well runs sub-parallel to the beds, so Z and TVT decouple (r≈0). The offset is the tiny
+  residual between well inclination and bed dip — not recoverable from test-available data.
+- ⇒ Images give *understanding* (why CV plateaus at ~15.2) but **no new predictive feature**.
+  Structural-geometry route is closed; do not re-investigate.
+
 ## Open data questions
 - Distribution of GR NaNs within wells (pptx says "some GR may be NaN") — how much, where?
 - How well-separated are wells spatially (for offset-well matching)? Need the X/Y map.
