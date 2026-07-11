@@ -26,13 +26,20 @@ PREDICTORS = {
 
 
 def build_submission(test_dir: Path, predictor_name: str) -> pd.DataFrame:
+    """One row per EVALUATION-ZONE point only.
+
+    Verified against sample_submission.csv: ids are ``{WELL}_{row_index}`` where
+    row_index is the 0-based positional index within the horizontal_well.csv, and only
+    rows with NaN ``TVT_input`` (the eval zone) are scored/submitted.
+    """
     predictor = PREDICTORS[predictor_name]
     rows: list[dict] = []
     for well in load_split(test_dir):
         preds = predictor(well.horizontal)
-        for row_index, (pred, is_eval) in enumerate(zip(preds, well.eval_mask)):
-            # emit every row; downstream we could restrict to is_eval if required
-            rows.append({"id": submission_id(well.name, row_index), "tvt": pred})
+        eval_mask = well.eval_mask.to_numpy()
+        for row_index, (pred, is_eval) in enumerate(zip(preds, eval_mask)):
+            if is_eval:
+                rows.append({"id": submission_id(well.name, row_index), "tvt": pred})
     return pd.DataFrame(rows)
 
 
