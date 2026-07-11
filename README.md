@@ -1,7 +1,9 @@
 # ROGII — Wellbore Geology Prediction
 
 Kaggle Featured **Code Competition** · predict **TVT (True Vertical Thickness, ft)**
-for the evaluation zone of each horizontal well. Metric: **Mean Squared Error (MSE)**.
+for the evaluation zone of each horizontal well. Metric: **RMSE**.
+Constraints: notebook-only, **≤ 9 h** CPU/GPU, **internet disabled**, output `submission.csv`.
+Final deadline **Aug 5, 2026**. External data / pre-trained models allowed if uploaded as a dataset.
 
 - Competition: <https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction>
 - 📓 **Knowledge / decisions / experiment log:** Obsidian vault note

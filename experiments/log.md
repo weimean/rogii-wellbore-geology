@@ -3,7 +3,7 @@
 Append one line per run while working. The richer narrative + decisions live in the
 Obsidian vault note `04 Projects/Kaggle — ROGII Wellbore Geology Prediction.md`.
 
-Metric: **MSE** (lower is better). Always report **grouped CV** (by WELLNAME).
+Metric: **RMSE** (lower is better; Kaggle scores √MSE). Always report **grouped CV** (by WELLNAME).
 
 | Date | Exp id | Change | CV MSE | LB MSE | Keep? | Notes |
 |------|--------|--------|--------|--------|-------|-------|

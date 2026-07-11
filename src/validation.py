@@ -1,7 +1,7 @@
 """Cross-validation and scoring.
 
 ⚠️ Split BY WELL. Rows within a well are highly autocorrelated; if the same well appears
-in both train and validation folds, CV MSE is optimistically biased and will not track
+in both train and validation folds, CV RMSE is optimistically biased and will not track
 the hidden leaderboard.
 """
 from __future__ import annotations
@@ -20,5 +20,9 @@ def group_folds(df: pd.DataFrame, n_splits: int = 5, group_col: str = "WELLNAME"
 
 
 def score(y_true: np.ndarray, y_pred: np.ndarray) -> float:
-    """Competition metric: Mean Squared Error."""
-    return float(mean_squared_error(y_true, y_pred))
+    """Competition metric: Root Mean Squared Error (matches the Kaggle leaderboard).
+
+    The 'Mean Squared Error' Evaluation *tag* is imprecise; the Evaluation section gives
+    the RMSE formula explicitly. Ranking is identical either way.
+    """
+    return float(np.sqrt(mean_squared_error(y_true, y_pred)))
