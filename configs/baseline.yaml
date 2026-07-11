@@ -1,0 +1,17 @@
+# Baseline experiment config. Copy this file per experiment (e.g. gbm_gr_align.yaml)
+# and log the run in experiments/log.md + the vault note.
+experiment: baseline_linear_interp
+
+data:
+  train_dir: data/raw/train
+  test_dir: data/raw/test
+
+model:
+  predictor: linear_interp   # one of: ffill, linear_interp
+
+validation:
+  n_splits: 5
+  group_col: WELLNAME
+
+output:
+  submission_path: outputs/submission_baseline.csv
