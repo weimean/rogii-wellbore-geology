@@ -24,3 +24,7 @@ kaggle.json
 .DS_Store
 .idea/
 .vscode/
+
+# stray tooling
+.Rhistory
+**/.Rhistory

@@ -29,11 +29,21 @@ kaggle competitions download -c rogii-wellbore-geology-prediction -p data/raw
 unzip data/raw/*.zip -d data/raw
 ```
 
-Then open `notebooks/01_eda.ipynb`, or build a baseline submission:
+Then build the best submission (fits on train, predicts test):
 
 ```bash
-uv run python -m src.submit --config configs/baseline.yaml
+uv run python -m src.submit --config configs/gbm_stack.yaml   # current best, CV 13.77
+uv run python tools/reproduce_cv.py                           # regenerate the CV table (~8 min)
 ```
+
+**Current best: `gbm_stack`** — a HistGBM over the 2nd-order HMM posterior + level anchor +
+trajectory, blended 0.5/0.5 with the variance fusion. CV 13.769, public LB 13.727.
+Progression: ffill 15.91 → level_regression 15.33 → hmm_fusion 14.24 → **gbm_stack 13.77**.
+See `notes/approaches/` (00–06) and `experiments/log.md`.
+
+Submitting (this is a **notebook-only** code competition — direct CSV upload is rejected):
+the self-contained kernel lives in `kernel/`; push with `kaggle kernels push -p kernel`, then
+`kaggle competitions submit rogii-wellbore-geology-prediction -k <user>/<kernel> -v <n> -f submission.csv -m "..."`.
 
 ## Layout
 
@@ -42,6 +52,8 @@ data/        raw + processed competition data          (gitignored)
 notebooks/   01_eda.ipynb (explore) · 99_submission.ipynb (submit)
 src/         data.py features.py validation.py model.py submit.py
 configs/     experiment configs (yaml)
+kernel/      self-contained Kaggle submission script + metadata
+tools/       reproduce_cv.py — regenerate the CV table
 models/      trained checkpoints                        (gitignored)
 outputs/     submissions, logs                          (gitignored)
 experiments/ log.md — terse per-run log (mirrors the vault note's table)

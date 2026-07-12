@@ -34,16 +34,27 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 - Per-approach narrative in `notes/approaches/NN-name.md` (idea → validation → conclusion).
 - Manage deps with `uv sync`; run with `uv run python -m src.submit --config <cfg>`.
 
-## What's been done (best CV RMSE in parens; ffill=15.910)
-- Baselines: ffill / linear_interp (flat last-known TVT).
-- Kalman GR + GR offset search + ensemble (15.558) — GR-wiggle matching, marginal.
-- **level_regression (15.266, current best)** — EDA reframed the task: eval-zone error is
-  68% LEVEL / 15% trend / 18% wiggle. TVT is a bounded mean-reverting drift (geosteering).
-  Ridge predicts per-well offset from pre-PS velocity + GR match. See notes/approaches/03.
-- **hmm_fusion (14.239, current best)** — 2nd-order (TVT,dip-rate) fwd-bwd HMM fused with
-  level_regression by posterior variance. 10.5% over ffill (~3× level_regression). Grid HMM
-  survives GR aliasing; variance blend falls back to level anchor where HMM drifts. Informed
-  by top notebooks (not copied); OU-from-EDA + level fusion are ours. See notes/approaches/05.
-- ⚠️ `.png` cross-sections are TRAIN-ONLY (0 test images) → cannot be an inference feature.
-- ⚠️ Public LB (top 4.86) is 3 leaked wells → not representative. Trust 773-well GroupKFold CV.
-- Next: multi-scale/self-correlation emission, prefix-CV harness, tune band/step for the tail.
+## Model progression (773-well GroupKFold CV; ffill=15.910)
+| Predictor (config) | CV RMSE | Public LB | Note |
+|----|----|----|----|
+| ffill | 15.910 | — | flat last-known TVT |
+| level_regression | 15.325 | — | Ridge on per-well offset (pre-PS velocity + GR); notes/03 |
+| hmm_fusion | 14.239 | 15.116 | 2nd-order (TVT,dip-rate) HMM ⊕ level by posterior var; notes/05 |
+| **gbm_stack (BEST)** | **13.769** | **13.727** | HistGBM(HMM+level+trajectory) 0.5-blend w/ fusion; notes/06 |
+
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`). Public rank ~3353/4750.
+- `uv run python tools/reproduce_cv.py` regenerates the whole CV table (~8 min).
+- Submit (code comp = notebook only): kernel in `kernel/`, pushed as `gtwm98/rogii-hmm-fusion`;
+  `kaggle competitions submit <comp> -k <kernel> -v <n> -f submission.csv -m ...`.
+
+## Closed levers (don't re-investigate — see experiments/log.md + notes)
+- `.png` cross-sections: TRAIN-ONLY (0 test images) → cannot be an inference feature.
+- Structural geometry (datum D=TVT+Z): diverges — within-lateral Z–TVT decoupling.
+- Self-correlation / NCC (self-ref HMM, self-corr emission): redundant with the typewell HMM.
+- HMM resolution: finer HURTS (250-bin best). LightGBM/CatBoost: tie HistGBM (features are the bottleneck).
+- Public LB is 3 leaked wells → not representative; median 9.65 is inflated by notebook forks. Trust CV.
+
+## Where the remaining headroom is (frontier-level, large build)
+Closing to the public-notebook tier (~7–9) needs their full pipeline: multi-scale NCC feeding a
+LightGBM+CatBoost stack + particle-filter/HMM blend + heavy tuning. Individual levers we can bolt
+onto our HMM-centric stack are marginal/negative — the gap is whole-pipeline engineering.
