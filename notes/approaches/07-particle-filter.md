@@ -47,5 +47,14 @@ irrelevant; the GBM extracts the complementary signal.
 ## 6. Conclusion
 The particle filter broke a four-negative plateau: 13.77 → 13.53. The lesson generalizes —
 **ensemble diversity should come from different algorithms, not restatements of the same one.**
-Next candidates: more diverse trackers (backward PF, different emission), the frontier's
-uncertainty features, and a proper LGB+CatBoost meta-stack.
+
+## 7. Public-LB divergence + where we stopped (2026-07-13)
+Submitting gbm_stack+PF (kernel v4): **public 13.854 — WORSE than v3's no-PF 13.727**, even
+though CV improved 13.77→13.53. The public LB is 3 leaked, non-representative wells (a scored
+subset); ±0.13 there is noise (same divergence seen for hmm_fusion: CV 14.24 / public 15.12).
+**We trust the 773-well OOF CV** (it estimates the private ~200-well LB) and keep the PF version.
+
+A follow-up self-reference PF (different algo AND different reference) added only +0.07
+(13.530→13.459) — below the public-LB noise floor. Given the divergence, chasing sub-0.1 CV
+gains is poor risk/reward, so **self-PF was NOT productionized** and we locked in gbm_stack+PF.
+The tracker-diversity vein is saturated; further LB gains need the frontier's full pipeline.

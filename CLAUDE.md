@@ -40,21 +40,34 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | ffill | 15.910 | — | flat last-known TVT |
 | level_regression | 15.325 | — | Ridge on per-well offset (pre-PS velocity + GR); notes/03 |
 | hmm_fusion | 14.239 | 15.116 | 2nd-order (TVT,dip-rate) HMM ⊕ level by posterior var; notes/05 |
-| **gbm_stack (BEST)** | **13.769** | **13.727** | HistGBM(HMM+level+trajectory) 0.5-blend w/ fusion; notes/06 |
+| gbm_stack | 13.769 | 13.727 | HistGBM(HMM+level+trajectory) blend w/ fusion; notes/06 |
+| **gbm_stack + PF (BEST)** | **13.530** | 13.854 | + bootstrap particle-filter features (diverse tracker); notes/07 |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`). Public rank ~3353/4750.
-- `uv run python tools/reproduce_cv.py` regenerates the whole CV table (~8 min).
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`), now incl. PF features. **Selected by CV.**
+- ⚠️ **CV/public diverge**: PF improves CV (13.77→13.53) but public got worse (13.73→13.85).
+  Public LB = 3 leaked, non-representative wells → noise. Trust the 773-well OOF CV; it estimates
+  the private (~200-well) LB that decides ranking.
+- `uv run python -u tools/reproduce_cv.py` regenerates the CV table (~10 min).
 - Submit (code comp = notebook only): kernel in `kernel/`, pushed as `gtwm98/rogii-hmm-fusion`;
   `kaggle competitions submit <comp> -k <kernel> -v <n> -f submission.csv -m ...`.
+
+## ⭐ Key winning principle
+**Ensemble diversity must come from a DIFFERENT ALGORITHM, not a restatement of the same one.**
+The self-reference HMM (same grid-FB algo as the typewell HMM) was redundant (+0.001); the
+particle filter (different algo, same reference) was complementary (+0.24). This is the one
+lever that broke our plateau.
 
 ## Closed levers (don't re-investigate — see experiments/log.md + notes)
 - `.png` cross-sections: TRAIN-ONLY (0 test images) → cannot be an inference feature.
 - Structural geometry (datum D=TVT+Z): diverges — within-lateral Z–TVT decoupling.
 - Self-correlation / NCC (self-ref HMM, self-corr emission): redundant with the typewell HMM.
-- HMM resolution: finer HURTS (250-bin best). LightGBM/CatBoost: tie HistGBM (features are the bottleneck).
+- HMM resolution: finer HURTS (250-bin best). LightGBM/CatBoost: tie HistGBM (features not model).
+- HMM parameter tuning: OVERFITS (holdout worse than EDA defaults).
+- Tracker-diversity vein SATURATED: PF +0.24, self-PF only +0.07 (below LB noise floor, not shipped).
 - Public LB is 3 leaked wells → not representative; median 9.65 is inflated by notebook forks. Trust CV.
 
 ## Where the remaining headroom is (frontier-level, large build)
 Closing to the public-notebook tier (~7–9) needs their full pipeline: multi-scale NCC feeding a
 LightGBM+CatBoost stack + particle-filter/HMM blend + heavy tuning. Individual levers we can bolt
-onto our HMM-centric stack are marginal/negative — the gap is whole-pipeline engineering.
+onto our stack are now marginal/negative and below the public-LB noise floor — the gap is
+whole-pipeline engineering, not increments.
