@@ -271,6 +271,55 @@ STACK_FEATS = ["hmm_pred", "hmm_std", "z_from_ps", "md_from_ps", "horiz_from_ps"
                "v50", "v200", "gr_off", "known_range", "eval_len"]
 
 
+# ---- particle filter --------------------------------------------------------
+def _sysresample(w, rng):
+    n = len(w); pos = (rng.random() + np.arange(n)) / n
+    return np.clip(np.searchsorted(np.cumsum(w), pos), 0, n - 1)
+
+
+def pf_posterior(well, n_particles=600, s_target=250, band_pad=90.0,
+                 mom=0.98, sig_r=0.003, sig_p=0.45, lam=1.0, df=4.0, seed=0):
+    rng = np.random.default_rng(seed)
+    h, t = well.horizontal, well.typewell
+    kn = h[h[TARGET_INPUT].notna()]; ev = h[h[TARGET_INPUT].isna()]
+    ff = baseline_ffill(h).astype(float); std = np.zeros(len(h))
+    if len(ev) == 0 or len(kn) < 50:
+        return ff, std
+    tw_tvt = t["TVT"].to_numpy(float)
+    tw_gr = gaussian_filter1d(t["GR"].ffill().bfill().to_numpy(float), 3)
+    last = float(kn[TARGET_INPUT].iloc[-1])
+    tw_at = np.interp(kn[TARGET_INPUT].values, tw_tvt, tw_gr)
+    gs = float(np.clip(np.nanstd(kn["GR"].fillna(np.nanmean(tw_gr)).values - tw_at), 10.0, 60.0))
+    tail = kn.tail(30)
+    ir = float((tail[TARGET_INPUT].iloc[-1] - tail[TARGET_INPUT].iloc[0]) /
+               max(tail["MD"].iloc[-1] - tail["MD"].iloc[0], 1.0))
+    lo = max(tw_tvt.min() - 40, last - band_pad); hi = min(tw_tvt.max() + 40, last + band_pad)
+    gr_all = h["GR"].interpolate(limit_direction="both").fillna(np.nanmean(tw_gr)).to_numpy(float)
+    ei = ev.index.values; gr_e = gr_all[ei]; md_e = ev["MD"].to_numpy(float)
+    n = len(ei); S = min(s_target, n); edges = np.linspace(0, n, S + 1).astype(int)
+    gr_b = np.array([gr_e[a:b].mean() for a, b in zip(edges[:-1], edges[1:])])
+    md_b = np.array([md_e[a:b].mean() for a, b in zip(edges[:-1], edges[1:])])
+    dm = np.diff(md_b, prepend=float(kn["MD"].iloc[-1]))
+    pos = last + rng.normal(0, 3.0, n_particles); rate = ir + rng.normal(0, 0.01, n_particles)
+    w = np.full(n_particles, 1.0 / n_particles); mean = np.zeros(S); var = np.zeros(S)
+    for s in range(S):
+        rate = mom * rate + rng.normal(0, sig_r, n_particles)
+        pos = np.clip(pos + rate * dm[s] + rng.normal(0, sig_p, n_particles), lo, hi)
+        zsc = (gr_b[s] - np.interp(pos, tw_tvt, tw_gr)) / gs
+        ll = -0.5 * (df + 1.0) * np.log1p(zsc ** 2 / df) * lam
+        w = w * np.exp(ll - ll.max()); sw = w.sum()
+        w = np.full(n_particles, 1.0 / n_particles) if (sw <= 0 or not np.isfinite(sw)) else w / sw
+        mean[s] = (w * pos).sum(); var[s] = max((w * pos ** 2).sum() - mean[s] ** 2, 0.0)
+        if 1.0 / (w ** 2).sum() < n_particles / 2:
+            idx = _sysresample(w, rng); pos = pos[idx]; rate = rate[idx]
+            w = np.full(n_particles, 1.0 / n_particles)
+    centers = 0.5 * (edges[:-1] + edges[1:])
+    pred = np.interp(np.arange(n), centers, mean); sd = np.sqrt(np.interp(np.arange(n), centers, var))
+    out = ff.copy(); out[ei] = np.where(np.isfinite(pred), pred, last)
+    std[ei] = np.where(np.isfinite(sd) & (sd > 0), sd, 1e6)
+    return out, std
+
+
 def _stack_features(well, level_model):
     h = well.horizontal
     kn = h[h[TARGET_INPUT].notna()]; ev = h[h[TARGET_INPUT].isna()]
@@ -307,7 +356,11 @@ def _stack_features(well, level_model):
     anchor = level_regression(well, level_model)[em]
     wt = 1.0 / (1.0 + (hs[em] / 4.0) ** 2)
     fusion = wt * hp[em] + (1 - wt) * anchor
-    X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt])
+    pp, ps = pf_posterior(well)
+    wtp = 1.0 / (1.0 + (ps[em] / 4.0) ** 2)
+    pf_fus = wtp * pp[em] + (1 - wtp) * anchor
+    pf_cols = [pp[em], ps[em], pp[em] - anchor, hp[em] - pp[em], pf_fus]
+    X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt] + pf_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, em=em)
     if "TVT" in h.columns:
         res["truth"] = ev["TVT"].values
@@ -326,7 +379,7 @@ def fit_gbm_stack(train_wells, level_model):
     return m.fit(np.vstack(X), np.concatenate(y))
 
 
-def gbm_stack(well, level_model, gbm, blend=0.5):
+def gbm_stack(well, level_model, gbm, blend=0.6):
     f = _stack_features(well, level_model)
     out = baseline_ffill(well.horizontal).astype(float)
     if f is None:
