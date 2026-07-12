@@ -1,0 +1,15 @@
+experiment: gbm_stack_v1
+
+data:
+  train_dir: data/raw/train
+  test_dir: data/raw/test
+
+model:
+  predictor: gbm_stack   # HistGBM over HMM posterior + level anchor + trajectory, 0.5 blend w/ fusion
+
+validation:
+  n_splits: 5
+  group_col: WELLNAME
+
+output:
+  submission_path: outputs/submission_gbm_stack.csv

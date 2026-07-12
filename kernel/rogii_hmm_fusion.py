@@ -262,14 +262,92 @@ def hmm_fusion(well, level_model, blend_k=4.0):
     return out
 
 
+
+# ---- GBM stack --------------------------------------------------------------
+from sklearn.ensemble import HistGradientBoostingRegressor
+
+STACK_FEATS = ["hmm_pred", "hmm_std", "z_from_ps", "md_from_ps", "horiz_from_ps", "dz",
+               "tort", "gr50", "gr_dev", "az_sin", "az_cos", "eval_frac",
+               "v50", "v200", "gr_off", "known_range", "eval_len"]
+
+
+def _stack_features(well, level_model):
+    h = well.horizontal
+    kn = h[h[TARGET_INPUT].notna()]; ev = h[h[TARGET_INPUT].isna()]
+    em = well.eval_mask.to_numpy()
+    if em.sum() == 0 or len(kn) < 200:
+        return None
+    kt = kn[TARGET_INPUT].values
+    ps_md = float(kn["MD"].iloc[-1]); ps_z = float(kn["Z"].iloc[-1])
+    ps_x = float(kn["X"].iloc[-1]); ps_y = float(kn["Y"].iloc[-1])
+    hp, hs = hmm_posterior(well)
+    ei = ev.index.values
+    z = h["Z"].values; md = h["MD"].values; x = h["X"].values; y = h["Y"].values
+    dz = np.gradient(z, md)
+    tort = pd.Series(dz).rolling(101, center=True, min_periods=1).std().to_numpy()
+    gr50 = gaussian_filter1d(h["GR"].interpolate(limit_direction="both").fillna(0).to_numpy(float), 50)
+    kn_gr_mean = float(kn["GR"].mean())
+    dxe = np.median(np.diff(ev["X"].values)) if len(ev) > 1 else 0.0
+    dye = np.median(np.diff(ev["Y"].values)) if len(ev) > 1 else 1.0
+    az = np.arctan2(dxe, dye)
+    n = len(ei); w50 = min(50, len(kt) - 1); w200 = min(200, len(kt) - 1)
+    cols = {
+        "hmm_pred": hp[em], "hmm_std": hs[em],
+        "z_from_ps": z[ei] - ps_z, "md_from_ps": md[ei] - ps_md,
+        "horiz_from_ps": np.sqrt((x[ei] - ps_x) ** 2 + (y[ei] - ps_y) ** 2),
+        "dz": dz[ei], "tort": tort[ei], "gr50": gr50[ei], "gr_dev": gr50[ei] - kn_gr_mean,
+        "az_sin": np.full(n, np.sin(az)), "az_cos": np.full(n, np.cos(az)),
+        "eval_frac": np.arange(n) / n,
+        "v50": np.full(n, (kt[-1] - kt[-1 - w50]) / w50),
+        "v200": np.full(n, (kt[-1] - kt[-1 - w200]) / w200),
+        "gr_off": np.full(n, _gr_offset_raw(well)),
+        "known_range": np.full(n, float(np.nanmax(kt) - np.nanmin(kt))),
+        "eval_len": np.full(n, n),
+    }
+    anchor = level_regression(well, level_model)[em]
+    wt = 1.0 / (1.0 + (hs[em] / 4.0) ** 2)
+    fusion = wt * hp[em] + (1 - wt) * anchor
+    X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt])
+    res = dict(X=X, anchor=anchor, fusion=fusion, em=em)
+    if "TVT" in h.columns:
+        res["truth"] = ev["TVT"].values
+    return res
+
+
+def fit_gbm_stack(train_wells, level_model):
+    X, y = [], []
+    for w in train_wells:
+        f = _stack_features(w, level_model)
+        if f is None or "truth" not in f:
+            continue
+        X.append(f["X"]); y.append(f["truth"] - f["anchor"])
+    m = HistGradientBoostingRegressor(max_iter=600, learning_rate=0.03, max_leaf_nodes=63,
+                                      min_samples_leaf=200, l2_regularization=1.0, random_state=0)
+    return m.fit(np.vstack(X), np.concatenate(y))
+
+
+def gbm_stack(well, level_model, gbm, blend=0.5):
+    f = _stack_features(well, level_model)
+    out = baseline_ffill(well.horizontal).astype(float)
+    if f is None:
+        return out
+    gbmA = f["anchor"] + gbm.predict(f["X"])
+    out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]
+    return out
+
+
 # ---- run --------------------------------------------------------------------
-print("fitting level model on train...")
-level_model = fit_level_model(load_split(TRAIN_DIR))
+print("loading train...")
+train_wells = load_split(TRAIN_DIR)
+print("fitting level model...")
+level_model = fit_level_model(train_wells)
+print("fitting GBM stack on train (computes HMM per train well)...")
+gbm = fit_gbm_stack(train_wells, level_model)
 
 print("predicting test wells...")
 rows = []
 for w in load_split(TEST_DIR):
-    preds = hmm_fusion(w, level_model)
+    preds = gbm_stack(w, level_model, gbm)
     em = w.eval_mask.to_numpy()
     for i, (p, is_ev) in enumerate(zip(preds, em)):
         if is_ev:

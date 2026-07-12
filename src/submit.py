@@ -26,6 +26,8 @@ from .model import (
     fit_level_model,
     level_regression,
     hmm_fusion,
+    fit_gbm_stack,
+    gbm_stack,
 )
 
 SIMPLE_PREDICTORS = {
@@ -40,7 +42,7 @@ WELL_PREDICTORS = {
 }
 
 # Predictors that must be FIT on the training split before predicting on test.
-TRAINED_PREDICTORS = {"level_regression", "hmm_fusion"}
+TRAINED_PREDICTORS = {"level_regression", "hmm_fusion", "gbm_stack"}
 
 
 def build_submission(test_dir: Path, predictor_name: str, train_dir: Path | None = None) -> pd.DataFrame:
@@ -49,9 +51,13 @@ def build_submission(test_dir: Path, predictor_name: str, train_dir: Path | None
     if predictor_name in TRAINED_PREDICTORS:
         if train_dir is None:
             raise ValueError(f"{predictor_name} needs a train_dir to fit on")
-        model = fit_level_model(load_split(train_dir))
+        train_wells = load_split(train_dir)
+        model = fit_level_model(train_wells)
         if predictor_name == "hmm_fusion":
             pred_fn = lambda well: hmm_fusion(well, model)  # noqa: E731
+        elif predictor_name == "gbm_stack":
+            gbm = fit_gbm_stack(train_wells, model)
+            pred_fn = lambda well: gbm_stack(well, model, gbm)  # noqa: E731
         else:
             pred_fn = lambda well: level_regression(well, model)  # noqa: E731
     elif predictor_name in WELL_PREDICTORS:
