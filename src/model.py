@@ -292,3 +292,158 @@ def level_regression(well: Well, model, shape_weight: float = 0.0) -> np.ndarray
         kal = kalman_gr(well)
         preds[em] += shape_weight * (kal[em] - kal[em].mean())
     return preds
+
+
+# --- HMM fusion --------------------------------------------------------------
+# Our own 2nd-order (TVT, dip-rate) forward-backward HMM smoother, informed by (not
+# copied from) the winning notebooks. Joint state = (position, dip-rate) with an OU
+# mean-reverting rate (matches the bounded-drift physics from our variance-vs-lag EDA);
+# a grid HMM represents multi-modal posteriors so the smoother survives GR aliasing.
+# Fused with level_regression by posterior variance: trust the HMM where GR is
+# informative (low var), fall back to the level anchor where it isn't. See notes/05.
+
+def _hmm_shift(F1: np.ndarray, deltas: np.ndarray, sig_cells: float) -> np.ndarray:
+    """Shift each rate-column of F1 (P,R) by deltas[r] cells (linear interp) then smooth."""
+    P, R = F1.shape
+    idx = np.arange(P)
+    out = np.empty_like(F1)
+    for r in range(R):
+        src = idx - deltas[r]
+        i0 = np.floor(src).astype(int); frac = src - i0
+        i0c = np.clip(i0, 0, P - 1); i1c = np.clip(i0 + 1, 0, P - 1)
+        out[:, r] = F1[i0c, r] * (1 - frac) + F1[i1c, r] * frac
+    if sig_cells > 0.3:
+        out = gaussian_filter1d(out, sig_cells, axis=0, mode="nearest")
+    return out
+
+
+def _hmm_shift_T(G: np.ndarray, deltas: np.ndarray, sig_cells: float) -> np.ndarray:
+    """Transpose of _hmm_shift (Gaussian ~symmetric; shift transpose = shift by -delta)."""
+    P, R = G.shape
+    if sig_cells > 0.3:
+        G = gaussian_filter1d(G, sig_cells, axis=0, mode="nearest")
+    idx = np.arange(P)
+    out = np.empty_like(G)
+    for r in range(R):
+        src = idx + deltas[r]
+        i0 = np.floor(src).astype(int); frac = src - i0
+        i0c = np.clip(i0, 0, P - 1); i1c = np.clip(i0 + 1, 0, P - 1)
+        out[:, r] = G[i0c, r] * (1 - frac) + G[i1c, r] * frac
+    return out
+
+
+def _hmm2_fb(gr_obs, md, gr_grid, grid, rates, gs, step,
+             mom, sig_r, sig_p, start_p, start_sig, ir, r0_sig, lam, df, emission):
+    """2nd-order (position, dip-rate) forward-backward HMM. Returns (mean, var) per obs."""
+    S = len(gr_obs); P = len(grid); R = len(rates)
+    zsc = (gr_obs[:, None] - gr_grid[None, :]) / gs
+    if emission == "t":
+        em = -0.5 * (df + 1.0) * np.log1p(zsc ** 2 / df) * lam
+    else:
+        em = -0.5 * np.minimum(zsc ** 2, 600.0) * lam
+
+    Krate = np.exp(-0.5 * ((rates[None, :] - mom * rates[:, None]) / sig_r) ** 2)
+    Krate /= Krate.sum(1, keepdims=True)
+    dm = np.diff(md, prepend=md[0])
+
+    pos0 = np.exp(-0.5 * ((np.arange(P) - start_p) / (start_sig / step)) ** 2)
+    rate0 = np.exp(-0.5 * ((rates - ir) / r0_sig) ** 2)
+    if pos0.sum() <= 0 or not np.isfinite(pos0.sum()):
+        pos0 = np.ones(P)
+    if rate0.sum() <= 0 or not np.isfinite(rate0.sum()):
+        rate0 = np.ones(R)
+    F = np.outer(pos0, rate0); F /= F.sum()
+
+    a_pred = np.empty((S, P, R)); a_filt = np.empty((S, P, R))
+    for s in range(S):
+        if s == 0:
+            F2 = F
+        else:
+            F1 = F @ Krate
+            F2 = _hmm_shift(F1, rates * dm[s] / step, sig_p / step)
+        a_pred[s] = F2
+        lik = np.exp(em[s] - em[s].max())
+        F = F2 * lik[:, None]
+        F = F / (F.sum() + 1e-300)
+        a_filt[s] = F
+
+    gamma = np.empty((S, P, R))
+    gamma[S - 1] = a_filt[S - 1]
+    for s in range(S - 2, -1, -1):
+        ratio = gamma[s + 1] / (a_pred[s + 1] + 1e-300)
+        back = _hmm_shift_T(ratio, rates * dm[s + 1] / step, sig_p / step)
+        g = a_filt[s] * (back @ Krate.T)
+        gamma[s] = g / (g.sum() + 1e-300)
+
+    post_p = gamma.sum(2)
+    post_p /= post_p.sum(1, keepdims=True)
+    mean = post_p @ grid
+    var = np.maximum(post_p @ (grid ** 2) - mean ** 2, 0.0)
+    return mean, var
+
+
+def hmm_posterior(well: Well, s_target: int = 250, step: float = 0.5, band_pad: float = 90.0,
+                  n_rates: int = 21, rate_span: float = 0.035, mom: float = 0.98,
+                  sig_r: float = 0.003, sig_p: float = 0.45, lam: float = 1.0,
+                  df: float = 4.0, emission: str = "t"):
+    """Run the 2nd-order HMM on a well; return (pred_rows, std_rows) over ALL rows
+    (known rows = ffill, eval rows = posterior mean/std). Falls back to ffill on failure."""
+    h, t = well.horizontal, well.typewell
+    kn = h[h[TARGET_INPUT].notna()]; ev = h[h[TARGET_INPUT].isna()]
+    ff = baseline_ffill(h).astype(float)
+    std_full = np.zeros(len(h))
+    if len(ev) == 0 or len(kn) < 50:
+        return ff, std_full
+
+    tw_tvt = t["TVT"].to_numpy(float)
+    tw_gr = t["GR"].ffill().bfill().to_numpy(float)
+    last_tvt = float(kn[TARGET_INPUT].iloc[-1])
+
+    tw_at = np.interp(kn[TARGET_INPUT].values, tw_tvt, tw_gr)
+    gs = float(np.clip(np.nanstd(kn["GR"].fillna(np.nanmean(tw_gr)).values - tw_at), 10.0, 60.0))
+    tail = kn.tail(30)
+    ir = float((tail[TARGET_INPUT].iloc[-1] - tail[TARGET_INPUT].iloc[0]) /
+               max(tail["MD"].iloc[-1] - tail["MD"].iloc[0], 1.0))
+
+    gmin = max(tw_tvt.min() - 40, last_tvt - band_pad)
+    gmax = min(tw_tvt.max() + 40, last_tvt + band_pad)
+    grid = np.arange(gmin, gmax + step, step)
+    gr_grid = np.interp(grid, tw_tvt, tw_gr)
+
+    gr_all = h["GR"].interpolate(limit_direction="both").fillna(np.nanmean(tw_gr)).to_numpy(float)
+    ei = ev.index.values
+    gr_e = gr_all[ei]; md_e = ev["MD"].to_numpy(float)
+    n = len(ei); S = min(s_target, n)
+    edges = np.linspace(0, n, S + 1).astype(int)
+    gr_b = np.array([gr_e[a:b].mean() for a, b in zip(edges[:-1], edges[1:])])
+    md_b = np.array([md_e[a:b].mean() for a, b in zip(edges[:-1], edges[1:])])
+
+    rates = np.linspace(-rate_span, rate_span, n_rates)
+    start_p = (last_tvt - gmin) / step
+    try:
+        mean_b, var_b = _hmm2_fb(gr_b, md_b, gr_grid, grid, rates, gs, step,
+                                 mom, sig_r, sig_p, start_p, 3.0, ir, 0.01, lam, df, emission)
+    except Exception:
+        return ff, std_full
+
+    centers = 0.5 * (edges[:-1] + edges[1:])
+    pred_e = np.interp(np.arange(n), centers, mean_b)
+    std_e = np.sqrt(np.interp(np.arange(n), centers, var_b))
+    pred_e = np.where(np.isfinite(pred_e), pred_e, last_tvt)
+    std_e = np.where(np.isfinite(std_e) & (std_e > 0), std_e, 1e6)
+
+    out = ff.copy(); out[ei] = pred_e
+    std_full[ei] = std_e
+    return out, std_full
+
+
+def hmm_fusion(well: Well, level_model, blend_k: float = 4.0, **hmm_kw) -> np.ndarray:
+    """Fuse the HMM posterior with the level_regression anchor by posterior variance:
+    w_hmm = 1/(1+(std/blend_k)^2). Our best model (CV RMSE ~14.24, -10.5% vs ffill)."""
+    hmm_pred, hmm_std = hmm_posterior(well, **hmm_kw)
+    anchor = level_regression(well, level_model)
+    em = well.eval_mask.to_numpy()
+    out = anchor.copy()
+    wt = 1.0 / (1.0 + (hmm_std[em] / blend_k) ** 2)
+    out[em] = wt * hmm_pred[em] + (1 - wt) * anchor[em]
+    return out

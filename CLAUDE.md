@@ -40,8 +40,10 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 - **level_regression (15.266, current best)** — EDA reframed the task: eval-zone error is
   68% LEVEL / 15% trend / 18% wiggle. TVT is a bounded mean-reverting drift (geosteering).
   Ridge predicts per-well offset from pre-PS velocity + GR match. See notes/approaches/03.
-- NCC + GBM (15.247) ties level_regression — GR wiggle not recoverable on real dist; public
-  LB (top 4.86) is 3 leaked wells, not representative. Trust the 773-well GroupKFold CV.
+- **hmm_fusion (14.239, current best)** — 2nd-order (TVT,dip-rate) fwd-bwd HMM fused with
+  level_regression by posterior variance. 10.5% over ffill (~3× level_regression). Grid HMM
+  survives GR aliasing; variance blend falls back to level anchor where HMM drifts. Informed
+  by top notebooks (not copied); OU-from-EDA + level fusion are ours. See notes/approaches/05.
 - ⚠️ `.png` cross-sections are TRAIN-ONLY (0 test images) → cannot be an inference feature.
-- Open question: every method plateaus at CV ≈ 15.2 with test-available inputs (X,Y,Z,GR,
-  typewell). May be near the achievable ceiling. level_regression stays production best.
+- ⚠️ Public LB (top 4.86) is 3 leaked wells → not representative. Trust 773-well GroupKFold CV.
+- Next: multi-scale/self-correlation emission, prefix-CV harness, tune band/step for the tail.

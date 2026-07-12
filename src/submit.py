@@ -25,6 +25,7 @@ from .model import (
     ensemble_kalman_offset,
     fit_level_model,
     level_regression,
+    hmm_fusion,
 )
 
 SIMPLE_PREDICTORS = {
@@ -39,7 +40,7 @@ WELL_PREDICTORS = {
 }
 
 # Predictors that must be FIT on the training split before predicting on test.
-TRAINED_PREDICTORS = {"level_regression"}
+TRAINED_PREDICTORS = {"level_regression", "hmm_fusion"}
 
 
 def build_submission(test_dir: Path, predictor_name: str, train_dir: Path | None = None) -> pd.DataFrame:
@@ -49,7 +50,10 @@ def build_submission(test_dir: Path, predictor_name: str, train_dir: Path | None
         if train_dir is None:
             raise ValueError(f"{predictor_name} needs a train_dir to fit on")
         model = fit_level_model(load_split(train_dir))
-        pred_fn = lambda well: level_regression(well, model)  # noqa: E731
+        if predictor_name == "hmm_fusion":
+            pred_fn = lambda well: hmm_fusion(well, model)  # noqa: E731
+        else:
+            pred_fn = lambda well: level_regression(well, model)  # noqa: E731
     elif predictor_name in WELL_PREDICTORS:
         pred_fn = WELL_PREDICTORS[predictor_name]
 
