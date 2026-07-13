@@ -43,7 +43,7 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | gbm_stack | 13.769 | 13.727 | HistGBM(HMM+level+trajectory) blend w/ fusion; notes/06 |
 | gbm_stack + PF | 13.530 | 13.854 | + bootstrap particle-filter features (diverse tracker); notes/07 |
 | gbm_stack + PF + A+B | 13.540 | — | + uncertainty (A) & GR-envelope (B) feats; kept by lockbox; notes/08 |
-| **+ LGB/Cat @ step=5 (BEST)** | **13.520** | — | LightGBM+CatBoost avg on 1/5-subsampled rows (drop HistGBM); notes/10 |
+| **+ LGB/Cat @ step=5 (BEST)** | **13.520** | **13.601** | LightGBM+CatBoost avg on 1/5-subsampled rows (drop HistGBM); best public too; notes/10 |
 
 - **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): LightGBM+CatBoost avg (step=5 rows) ⊕ PF ⊕ A+B.
 - **Phase 2 (notes/10):** two levers — subsample-as-regularization (train every 5th eval row) + model
