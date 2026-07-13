@@ -320,6 +320,27 @@ def pf_posterior(well, n_particles=600, s_target=250, band_pad=90.0,
     return out, std
 
 
+def _geology_features(well, hp_em, last):
+    # typewell Geology LEVEL features (formation labels -> absolute typewell TVT). Orthogonal to
+    # the GR-alignment HMM. Biggest gain in the project: stack CV 13.49->13.00 (notes/11).
+    n = len(hp_em); t = well.typewell
+    if "Geology" not in t.columns:
+        return np.zeros(n), np.zeros(n), np.full(n, last)
+    g = t["Geology"].astype(str).str.strip()
+    valid = (g.notna() & (g != "") & (g != "nan") & t["TVT"].notna()).to_numpy()
+    tw_tvt = t["TVT"].to_numpy(float)[valid]; tw_geo = g.to_numpy()[valid]
+    if len(tw_tvt) < 20:
+        return np.zeros(n), np.zeros(n), np.full(n, last)
+    order = np.argsort(tw_tvt); stvt = tw_tvt[order]; sgeo = tw_geo[order]
+    fm_med = {f: float(np.median(tw_tvt[tw_geo == f])) for f in np.unique(tw_geo)}
+    def form_med(v):
+        i = int(np.clip(np.searchsorted(stvt, v), 0, len(stvt) - 1))
+        return fm_med[sgeo[i]]
+    last_med = form_med(last)
+    hmm_med = np.array([form_med(v) for v in hp_em])
+    return np.full(n, last_med - last), hmm_med - last, np.full(n, last_med)
+
+
 def _stack_features(well, level_model):
     h = well.horizontal
     kn = h[h[TARGET_INPUT].notna()]; ev = h[h[TARGET_INPUT].isna()]
@@ -375,8 +396,10 @@ def _stack_features(well, level_model):
               gser.rolling(31, center=True, min_periods=1).std().fillna(0).to_numpy(),
               gser.rolling(151, center=True, min_periods=1).std().fillna(0).to_numpy(),
               np.abs(np.gradient(gaussian_filter1d(ge, 5))) if len(ge) > 1 else np.zeros(len(ge))]
+    geo_last_off, geo_hmm_off, geo_last_med = _geology_features(well, hp[em], float(kt[-1]))
+    g_cols = [geo_last_off, geo_hmm_off, geo_last_med]
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
-                        + pf_cols + a_cols + b_cols)
+                        + pf_cols + a_cols + b_cols + g_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, em=em)
     if "TVT" in h.columns:
         res["truth"] = ev["TVT"].values

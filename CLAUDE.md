@@ -43,16 +43,21 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | gbm_stack | 13.769 | 13.727 | HistGBM(HMM+level+trajectory) blend w/ fusion; notes/06 |
 | gbm_stack + PF | 13.530 | 13.854 | + bootstrap particle-filter features (diverse tracker); notes/07 |
 | gbm_stack + PF + A+B | 13.540 | — | + uncertainty (A) & GR-envelope (B) feats; kept by lockbox; notes/08 |
-| **+ LGB/Cat @ step=5 (BEST)** | **13.520** | **13.601** | LightGBM+CatBoost avg on 1/5-subsampled rows (drop HistGBM); best public too; notes/10 |
+| + LGB/Cat @ step=5 | 13.520 | 13.601 | LightGBM+CatBoost avg on 1/5-subsampled rows (drop HistGBM); notes/10 |
+| **+ typewell Geology (BEST)** | **12.985** | tbd | formation-label LEVEL features; −0.53, biggest gain since HMM; notes/11 |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): LightGBM+CatBoost avg (step=5 rows) ⊕ PF ⊕ A+B.
-- **Phase 2 (notes/10):** two levers — subsample-as-regularization (train every 5th eval row) + model
-  diversity (LGB+Cat, HistGBM dropped) — give canonical CV 13.540→**13.520** (−0.02, honest/unbiased).
-  Lockbox showed −0.265 but that's SELECTION-BIASED (best-of-7 blends picked on it); trust the −0.02.
-  Modest, directionally positive, our best config. Needs `lightgbm`+`catboost` (both on Kaggle image).
-- ⚠️ **~9 is NOT reachable** (notes/09): it's a per-well LEVEL problem needing offset R²≈0.95; the full
-  stack recovers 0.337 and 4 independent level levers die at ~0.10 (missing signal is geology absent
-  from X/Y/Z/GR/typewell). Phase-2 gains are wiggle-side (the 32% of budget that isn't level).
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): LightGBM+CatBoost avg (step=5) ⊕ PF ⊕ A+B ⊕ Geology.
+- **⭐ Geology breakthrough (notes/11):** the typewell `Geology` column (formation labels vs TVT) cracks the
+  LEVEL component. A lateral holds in a target formation whose absolute TVT the typewell gives; formations
+  are ordered in TVT so they DON'T alias like GR. 3 feats (geo_last_off/geo_hmm_off/geo_last_med, in
+  `_geology_features`) → canonical CV 13.520→**12.985 (−0.53)**, pooled −0.49, lockbox −0.62 — all agree,
+  no selection bias. Orthogonal to the HMM (GR alignment ≠ formation labels). **Geology is the one
+  geological signal available at test time** (formation tops & .png are train-only).
+- **Phase 2 (notes/10):** subsample-as-regularization (train every 5th eval row) + LGB/Cat diversity
+  (drop HistGBM): canonical 13.540→13.520. Needs `lightgbm`+`catboost` (both on Kaggle image).
+- ⚠️ **~9 not yet reached but level is PARTLY recoverable now** (notes/09 amended by notes/11): the 4 dead
+  level levers were all GR cross-correlation (alias); the Geology *label* channel was untested and works.
+  Remaining level room: a GR→formation classifier for the eval zone (test-legal 0.187 → oracle 0.245).
 - ⚠️ **A+B is a wash on pooled CV** (−0.01) but improves the lockbox; Group C (NCC quality) was INERT.
   `tools/frontier_cv.py` = lockbox harness; `tools/frontier_fast.py` = fast cached harness (step subsample);
   `_cache_base.py`+`_cache_frontier.py` rebuild the /tmp caches (wiped on reboot).
