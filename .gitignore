@@ -28,3 +28,6 @@ kaggle.json
 # stray tooling
 .Rhistory
 **/.Rhistory
+
+# CatBoost training logs
+catboost_info/

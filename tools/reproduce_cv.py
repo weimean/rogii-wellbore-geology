@@ -59,20 +59,30 @@ def main():
     X = np.vstack([f["X"] for _, f in rows])
     y = truth - anchor
 
-    # 3) OOF GBM correction (0.6-blend with fusion, matching production gbm_stack)
-    log("OOF GBM...")
+    # 3) OOF stack correction — LightGBM+CatBoost on step=5 subsampled rows (production config),
+    #    0.6-blend with fusion. Subsampling regularizes; two boosters add diversity (notes/10).
+    log("OOF stack (LightGBM + CatBoost, step=5)...")
+    import lightgbm as lgb
+    from catboost import CatBoostRegressor
+    step = 5
+    idx_in_well = np.concatenate([np.arange((g == i).sum()) for i in range(g.max() + 1)])
+    sub = (idx_in_well % step) == 0
     oof_gbm = np.zeros(len(y))
     for tr, va in gkf.split(X, groups=g):
-        m = HistGradientBoostingRegressor(max_iter=600, learning_rate=0.03, max_leaf_nodes=63,
-                                          min_samples_leaf=200, l2_regularization=1.0, random_state=0)
-        m.fit(X[tr], y[tr]); oof_gbm[va] = m.predict(X[va])
+        ti = tr[sub[tr]]
+        lgm = lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
+                                min_child_samples=200, reg_lambda=1.0, subsample=0.8, subsample_freq=1,
+                                colsample_bytree=0.8, random_state=0, n_jobs=-1, verbose=-1).fit(X[ti], y[ti])
+        cbm = CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
+                                rsm=0.8, random_seed=0, thread_count=-1, verbose=0).fit(X[ti], y[ti])
+        oof_gbm[va] = 0.5 * (lgm.predict(X[va]) + cbm.predict(X[va]))
     gbm_stack = 0.6 * (anchor + oof_gbm) + 0.4 * fusion
 
     print("\n=== 773-well GroupKFold CV (global pooled RMSE) ===", flush=True)
     print(f"  ffill:            {score(truth, last):.3f}", flush=True)
     print(f"  level_regression: {score(truth, anchor):.3f}", flush=True)
     print(f"  hmm_fusion:       {score(truth, fusion):.3f}", flush=True)
-    print(f"  gbm_stack (+PF):  {score(truth, gbm_stack):.3f}", flush=True)
+    print(f"  gbm_stack(LGB+Cat): {score(truth, gbm_stack):.3f}", flush=True)
 
 
 if __name__ == "__main__":

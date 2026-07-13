@@ -42,14 +42,20 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | hmm_fusion | 14.239 | 15.116 | 2nd-order (TVT,dip-rate) HMM ⊕ level by posterior var; notes/05 |
 | gbm_stack | 13.769 | 13.727 | HistGBM(HMM+level+trajectory) blend w/ fusion; notes/06 |
 | gbm_stack + PF | 13.530 | 13.854 | + bootstrap particle-filter features (diverse tracker); notes/07 |
-| **gbm_stack + PF + A+B** | **13.540** | — | + uncertainty (A) & GR-envelope (B) feats; kept by LOCKBOX not pooled CV; notes/08 |
+| gbm_stack + PF + A+B | 13.540 | — | + uncertainty (A) & GR-envelope (B) feats; kept by lockbox; notes/08 |
+| **+ LGB/Cat @ step=5 (BEST)** | **13.520** | — | LightGBM+CatBoost avg on 1/5-subsampled rows (drop HistGBM); notes/10 |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`), now incl. PF + A+B features. **Selected by lockbox.**
-- ⚠️ **A+B is a wash on pooled CV** (13.530→13.540, −0.01) but improves the held-out **lockbox**
-  (154 never-tuned wells: 13.742→13.623, −0.12; lockbox-deep 16.112→15.969). Kept because the
-  lockbox is the clean private-set proxy. Honest: small gain, within noise on pooled CV. Group C
-  (multi-scale NCC quality) was INERT and dropped. `tools/frontier_cv.py` runs the lockbox harness;
-  `_cache_base.py` + `_cache_frontier.py` rebuild the /tmp posterior caches (wiped on reboot).
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): LightGBM+CatBoost avg (step=5 rows) ⊕ PF ⊕ A+B.
+- **Phase 2 (notes/10):** two levers — subsample-as-regularization (train every 5th eval row) + model
+  diversity (LGB+Cat, HistGBM dropped) — give canonical CV 13.540→**13.520** (−0.02, honest/unbiased).
+  Lockbox showed −0.265 but that's SELECTION-BIASED (best-of-7 blends picked on it); trust the −0.02.
+  Modest, directionally positive, our best config. Needs `lightgbm`+`catboost` (both on Kaggle image).
+- ⚠️ **~9 is NOT reachable** (notes/09): it's a per-well LEVEL problem needing offset R²≈0.95; the full
+  stack recovers 0.337 and 4 independent level levers die at ~0.10 (missing signal is geology absent
+  from X/Y/Z/GR/typewell). Phase-2 gains are wiggle-side (the 32% of budget that isn't level).
+- ⚠️ **A+B is a wash on pooled CV** (−0.01) but improves the lockbox; Group C (NCC quality) was INERT.
+  `tools/frontier_cv.py` = lockbox harness; `tools/frontier_fast.py` = fast cached harness (step subsample);
+  `_cache_base.py`+`_cache_frontier.py` rebuild the /tmp caches (wiped on reboot).
 - ⚠️ **CV/public diverge**: PF improves CV (13.77→13.53) but public got worse (13.73→13.85).
   Public LB = 3 leaked, non-representative wells → noise. Trust the 773-well OOF CV; it estimates
   the private (~200-well) LB that decides ranking.

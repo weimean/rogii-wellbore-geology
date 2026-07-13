@@ -12,6 +12,7 @@ dependencies = [
     "pyyaml>=6.0",          # config files
     "tqdm>=4.66",
     "lightgbm>=4.6.0",
+    "catboost>=1.2.10",
 ]
 
 [dependency-groups]
