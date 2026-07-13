@@ -16,6 +16,18 @@ only the real-test public LB exposed it. **Lesson: verify a feature EXISTS at in
 the geo features fall back to zeros — the smoking gun). The sections below are the (now-invalid)
 original analysis, kept as a record of the trap.
 
+## 0b. Follow-up — can we INFER geology from shared (train∩test) columns? Marginal.
+The legitimate fix: train `typewell GR + TVT-position → Geology` on train typewells (which have
+the labels), apply out-of-fold to a held-out well's typewell (GR+TVT only — shared columns), then
+rebuild the formation-offset feature from INFERRED labels. `tools/geology_infer_probe.py`:
+- cross-well formation accuracy only **0.45** — the 773 wells span multiple fields with **43
+  inconsistently-named formations**, so the vocabulary/GR signatures don't transfer.
+- offset R²: baseline 0.098 → **inferred-geo 0.113** (+0.015, corr 0.143) vs true-geo 0.187. ~85%
+  of the signal is lost; the +0.015 is below the noise floor and already captured by existing GR
+  features (HMM/PF, gr_off). **Not productionized.** The strong geology signal lives in the true
+  (train-only) formation calls; the GR-recoverable part is marginal. **Level ceiling holds.** The
+  43-formation multi-field heterogeneity also explains why spatial/cross-well transfer is weak.
+
 ---
 
 ## [ORIGINAL, INVALID] Typewell Geology "cracks" the LEVEL component
