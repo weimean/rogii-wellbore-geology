@@ -41,9 +41,15 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | level_regression | 15.325 | — | Ridge on per-well offset (pre-PS velocity + GR); notes/03 |
 | hmm_fusion | 14.239 | 15.116 | 2nd-order (TVT,dip-rate) HMM ⊕ level by posterior var; notes/05 |
 | gbm_stack | 13.769 | 13.727 | HistGBM(HMM+level+trajectory) blend w/ fusion; notes/06 |
-| **gbm_stack + PF (BEST)** | **13.530** | 13.854 | + bootstrap particle-filter features (diverse tracker); notes/07 |
+| gbm_stack + PF | 13.530 | 13.854 | + bootstrap particle-filter features (diverse tracker); notes/07 |
+| **gbm_stack + PF + A+B** | **13.540** | — | + uncertainty (A) & GR-envelope (B) feats; kept by LOCKBOX not pooled CV; notes/08 |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`), now incl. PF features. **Selected by CV.**
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`), now incl. PF + A+B features. **Selected by lockbox.**
+- ⚠️ **A+B is a wash on pooled CV** (13.530→13.540, −0.01) but improves the held-out **lockbox**
+  (154 never-tuned wells: 13.742→13.623, −0.12; lockbox-deep 16.112→15.969). Kept because the
+  lockbox is the clean private-set proxy. Honest: small gain, within noise on pooled CV. Group C
+  (multi-scale NCC quality) was INERT and dropped. `tools/frontier_cv.py` runs the lockbox harness;
+  `_cache_base.py` + `_cache_frontier.py` rebuild the /tmp posterior caches (wiped on reboot).
 - ⚠️ **CV/public diverge**: PF improves CV (13.77→13.53) but public got worse (13.73→13.85).
   Public LB = 3 leaked, non-representative wells → noise. Trust the 773-well OOF CV; it estimates
   the private (~200-well) LB that decides ranking.

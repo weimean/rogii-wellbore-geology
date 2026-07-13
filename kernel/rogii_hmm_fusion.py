@@ -360,7 +360,23 @@ def _stack_features(well, level_model):
     wtp = 1.0 / (1.0 + (ps[em] / 4.0) ** 2)
     pf_fus = wtp * pp[em] + (1 - wtp) * anchor
     pf_cols = [pp[em], ps[em], pp[em] - anchor, hp[em] - pp[em], pf_fus]
-    X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt] + pf_cols)
+    # Group A: inter-signal uncertainty; Group B: GR envelope/energy on eval rows.
+    # Validated on the frontier lockbox: 13.742 -> 13.623 (notes/08).
+    hpe, ppe, hse, pse = hp[em], pp[em], hs[em], ps[em]
+    a_absdiff = np.abs(hpe - ppe); a_stdsum = hse + pse
+    a_cols = [a_absdiff, a_stdsum, a_absdiff / (a_stdsum + 1.0),
+              np.abs(hpe - anchor), np.abs(ppe - anchor)]
+    tw_gr_b = gaussian_filter1d(well.typewell["GR"].ffill().bfill().to_numpy(float), 3)
+    ge = h["GR"].interpolate(limit_direction="both").fillna(np.nanmean(tw_gr_b)).to_numpy(float)[ei]
+    gser = pd.Series(ge)
+    b_cols = [gser.rolling(51, center=True, min_periods=1).max().to_numpy(),
+              gser.rolling(51, center=True, min_periods=1).min().to_numpy(),
+              np.sqrt(pd.Series(ge ** 2).rolling(51, center=True, min_periods=1).mean().to_numpy()),
+              gser.rolling(31, center=True, min_periods=1).std().fillna(0).to_numpy(),
+              gser.rolling(151, center=True, min_periods=1).std().fillna(0).to_numpy(),
+              np.abs(np.gradient(gaussian_filter1d(ge, 5))) if len(ge) > 1 else np.zeros(len(ge))]
+    X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
+                        + pf_cols + a_cols + b_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, em=em)
     if "TVT" in h.columns:
         res["truth"] = ev["TVT"].values
