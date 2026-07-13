@@ -44,7 +44,7 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | gbm_stack + PF | 13.530 | 13.854 | + bootstrap particle-filter features (diverse tracker); notes/07 |
 | gbm_stack + PF + A+B | 13.540 | — | + uncertainty (A) & GR-envelope (B) feats; kept by lockbox; notes/08 |
 | + LGB/Cat @ step=5 | 13.520 | 13.601 | LightGBM+CatBoost avg on 1/5-subsampled rows (drop HistGBM); notes/10 |
-| **+ typewell Geology (BEST)** | **12.985** | tbd | formation-label LEVEL features; −0.53, biggest gain since HMM; notes/11 |
+| **+ typewell Geology (BEST)** | **12.985** | 13.927 | formation-label LEVEL feats; −0.53 CV but public DIVERGES (+0.33); notes/11 |
 
 - **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): LightGBM+CatBoost avg (step=5) ⊕ PF ⊕ A+B ⊕ Geology.
 - **⭐ Geology breakthrough (notes/11):** the typewell `Geology` column (formation labels vs TVT) cracks the
@@ -53,6 +53,10 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
   `_geology_features`) → canonical CV 13.520→**12.985 (−0.53)**, pooled −0.49, lockbox −0.62 — all agree,
   no selection bias. Orthogonal to the HMM (GR alignment ≠ formation labels). **Geology is the one
   geological signal available at test time** (formation tops & .png are train-only).
+  ⚠️ **CV/public DIVERGE hard**: CV −0.53 but public 13.601→13.927 (+0.33). BUT the lockbox
+  (154 never-tuned wells) also gave −0.62, so it's not CV-fold overfitting — two independent
+  held-out estimates agree. Public = 3 leaked wells → trust the CV. **Hedge: select BOTH v6
+  (geology, CV-best) and v5 (phase-2, public-best) as the 2 final submissions.**
 - **Phase 2 (notes/10):** subsample-as-regularization (train every 5th eval row) + LGB/Cat diversity
   (drop HistGBM): canonical 13.540→13.520. Needs `lightgbm`+`catboost` (both on Kaggle image).
 - ⚠️ **~9 not yet reached but level is PARTLY recoverable now** (notes/09 amended by notes/11): the 4 dead
