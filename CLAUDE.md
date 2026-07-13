@@ -43,25 +43,22 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | gbm_stack | 13.769 | 13.727 | HistGBM(HMM+level+trajectory) blend w/ fusion; notes/06 |
 | gbm_stack + PF | 13.530 | 13.854 | + bootstrap particle-filter features (diverse tracker); notes/07 |
 | gbm_stack + PF + A+B | 13.540 | — | + uncertainty (A) & GR-envelope (B) feats; kept by lockbox; notes/08 |
-| + LGB/Cat @ step=5 | 13.520 | 13.601 | LightGBM+CatBoost avg on 1/5-subsampled rows (drop HistGBM); notes/10 |
-| **+ typewell Geology (BEST)** | **12.985** | 13.927 | formation-label LEVEL feats; −0.53 CV but public DIVERGES (+0.33); notes/11 |
+| **+ LGB/Cat @ step=5 (BEST)** | **13.520** | 13.601 | LightGBM+CatBoost avg on 1/5-subsampled rows (drop HistGBM); notes/10 |
+| ~~+ typewell Geology~~ (REVERTED) | ~~12.985~~ | 13.927 | LEAKAGE — Geology is TRAIN-ONLY; feature absent in test → public got worse; notes/11 |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): LightGBM+CatBoost avg (step=5) ⊕ PF ⊕ A+B ⊕ Geology.
-- **⭐ Geology breakthrough (notes/11):** the typewell `Geology` column (formation labels vs TVT) cracks the
-  LEVEL component. A lateral holds in a target formation whose absolute TVT the typewell gives; formations
-  are ordered in TVT so they DON'T alias like GR. 3 feats (geo_last_off/geo_hmm_off/geo_last_med, in
-  `_geology_features`) → canonical CV 13.520→**12.985 (−0.53)**, pooled −0.49, lockbox −0.62 — all agree,
-  no selection bias. Orthogonal to the HMM (GR alignment ≠ formation labels). **Geology is the one
-  geological signal available at test time** (formation tops & .png are train-only).
-  ⚠️ **CV/public DIVERGE hard**: CV −0.53 but public 13.601→13.927 (+0.33). BUT the lockbox
-  (154 never-tuned wells) also gave −0.62, so it's not CV-fold overfitting — two independent
-  held-out estimates agree. Public = 3 leaked wells → trust the CV. **Hedge: select BOTH v6
-  (geology, CV-best) and v5 (phase-2, public-best) as the 2 final submissions.**
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): LightGBM+CatBoost avg (step=5) ⊕ PF ⊕ A+B.
+- 🚨 **Geology was LEAKAGE, REVERTED (notes/11):** the typewell `Geology` column is **TRAIN-ONLY** —
+  test typewells have only `TVT, GR` (verified: all 3 example test typewells lack the column). The
+  −0.53 CV/lockbox gain was real *on train* but the feature is **absent at inference** (`_geology_features`
+  falls back to zeros on test) → public got WORSE (13.601→13.927). CV+lockbox both used train wells so
+  neither could catch it; only the real-test public LB did. Classic train-only-feature leak. Diagnostics:
+  `tools/critique_diag.py` (bootstrap CI, ablation, test-well representativeness caught the fallback).
+  **Lesson: verify a feature EXISTS at inference before building on it** — check `data/raw/test` columns.
 - **Phase 2 (notes/10):** subsample-as-regularization (train every 5th eval row) + LGB/Cat diversity
-  (drop HistGBM): canonical 13.540→13.520. Needs `lightgbm`+`catboost` (both on Kaggle image).
-- ⚠️ **~9 not yet reached but level is PARTLY recoverable now** (notes/09 amended by notes/11): the 4 dead
-  level levers were all GR cross-correlation (alias); the Geology *label* channel was untested and works.
-  Remaining level room: a GR→formation classifier for the eval zone (test-legal 0.187 → oracle 0.245).
+  (drop HistGBM): canonical 13.540→13.520, public 13.601 (best). Needs `lightgbm`+`catboost` (Kaggle image).
+- ⚠️ **~9 is NOT reachable** (notes/09): level (68%) + trend (15%) are geology-locked; 4 GR level levers
+  + slope all die at R²≈0. The geology *labels* would crack it but they're train-only. 18% wiggle is
+  saturated. 13.520 is at the input-limited ceiling.
 - ⚠️ **A+B is a wash on pooled CV** (−0.01) but improves the lockbox; Group C (NCC quality) was INERT.
   `tools/frontier_cv.py` = lockbox harness; `tools/frontier_fast.py` = fast cached harness (step subsample);
   `_cache_base.py`+`_cache_frontier.py` rebuild the /tmp caches (wiped on reboot).

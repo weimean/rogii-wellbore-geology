@@ -396,10 +396,9 @@ def _stack_features(well, level_model):
               gser.rolling(31, center=True, min_periods=1).std().fillna(0).to_numpy(),
               gser.rolling(151, center=True, min_periods=1).std().fillna(0).to_numpy(),
               np.abs(np.gradient(gaussian_filter1d(ge, 5))) if len(ge) > 1 else np.zeros(len(ge))]
-    geo_last_off, geo_hmm_off, geo_last_med = _geology_features(well, hp[em], float(kt[-1]))
-    g_cols = [geo_last_off, geo_hmm_off, geo_last_med]
+    # typewell Geology is TRAIN-ONLY (test typewells lack it) -> geology feats were leakage. Removed.
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
-                        + pf_cols + a_cols + b_cols + g_cols)
+                        + pf_cols + a_cols + b_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, em=em)
     if "TVT" in h.columns:
         res["truth"] = ev["TVT"].values

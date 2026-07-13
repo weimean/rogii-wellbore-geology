@@ -1,4 +1,24 @@
-# Approach 11 — Typewell Geology cracks the LEVEL component
+# Approach 11 — Typewell Geology: a LEAKAGE trap (REVERTED)
+
+**Status:** 🚨 REVERTED — the feature is TRAIN-ONLY; the gain was leakage that cannot transfer.
+**Date:** 2026-07-13
+
+## 0. THE VERDICT (read first)
+The typewell `Geology` column exists **only in train** — test typewells have just `TVT, GR`
+(verified: all 3 example test typewells lack the column, and the Kaggle run confirmed it by
+scoring *worse*). So `_geology_features` falls back to zeros at inference: the model was trained
+on real geology values but sees constant zeros in test → **public 13.601 → 13.927 (worse)**.
+The −0.53 CV / −0.62 lockbox gain was real *on train wells* but is pure leakage — CV and lockbox
+both used train wells (which have Geology), so neither could detect the feature's absence in test;
+only the real-test public LB exposed it. **Lesson: verify a feature EXISTS at inference (check
+`data/raw/test`) before building on it.** Diagnostics that caught it: `tools/critique_diag.py`
+(bootstrap CI confirmed the gain was "real" on train; the test-well representativeness check showed
+the geo features fall back to zeros — the smoking gun). The sections below are the (now-invalid)
+original analysis, kept as a record of the trap.
+
+---
+
+## [ORIGINAL, INVALID] Typewell Geology "cracks" the LEVEL component
 
 **Status:** concluded-kept (current best; biggest single gain in the project)
 **Date:** 2026-07-13

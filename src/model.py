@@ -549,12 +549,10 @@ def _stack_features(well: Well, level_model, anchor_override=None):
               gser.rolling(31, center=True, min_periods=1).std().fillna(0).to_numpy(),
               gser.rolling(151, center=True, min_periods=1).std().fillna(0).to_numpy(),
               np.abs(np.gradient(gaussian_filter1d(ge, 5))) if len(ge) > 1 else np.zeros(len(ge))]
-    # --- Geology LEVEL features (typewell formation labels). Biggest gain in the project:
-    #     stack pooled CV 13.49 -> 13.00, lockbox 13.51 -> 12.89 (notes/11). ---
-    geo_last_off, geo_hmm_off, geo_last_med = _geology_features(well, hp[em], float(kt[-1]))
-    g_cols = [geo_last_off, geo_hmm_off, geo_last_med]
+    # NOTE: typewell Geology is TRAIN-ONLY (test typewells have only TVT, GR). Geology LEVEL
+    # features looked like a -0.53 CV win but were leakage — absent at inference (notes/11). Removed.
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
-                        + pf_cols + a_cols + b_cols + g_cols)
+                        + pf_cols + a_cols + b_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, ff=baseline_ffill(h), em=em)
     if "TVT" in h.columns:
         res["truth"] = ev["TVT"].values
