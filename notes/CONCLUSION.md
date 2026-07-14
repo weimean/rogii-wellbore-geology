@@ -1,7 +1,7 @@
 # ROGII Wellbore Geology — Final Conclusion
 
 **Task:** predict eval-zone TVT (True Vertical Thickness) for horizontal wells. Metric: RMSE.
-**Final model:** `gbm_stack` (`configs/gbm_stack.yaml`) — seed-ensembled LGB+Cat — **CV 13.499 / public 13.60**.
+**Final model:** `gbm_stack` (`configs/gbm_stack.yaml`) — seed-ensembled LGB+Cat — **CV 13.499 / public 13.549 (best on both)**.
 **Verdict:** at the input-limited ceiling. The remaining error is structurally irreducible with
 the data available at inference.
 
@@ -66,7 +66,7 @@ is 8.6 (≈oracle) — the pooled 13.5 is a tail of long, undirectable laterals.
 - CV table: `uv run python -u tools/reproduce_cv.py` (~15 min).
 - Fast experiment harness: `tools/frontier_fast.py` (cached matrix + train subsampling).
 - Caches (wiped on reboot): `_cache_base.py` → `/tmp/rogii_feats.npz` + `rogii_pf.npz`.
-- Submit: kernel `gtwm98/rogii-hmm-fusion` (v7 = current phase-2); the visible-tools index is `tools/README.md`.
+- Submit: kernel `gtwm98/rogii-hmm-fusion` (v8 = current seed-ensemble); the tools index is `tools/README.md`.
 
 ## 5. Honest final position
 
