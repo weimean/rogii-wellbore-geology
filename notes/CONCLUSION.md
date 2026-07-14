@@ -1,7 +1,7 @@
 # ROGII Wellbore Geology — Final Conclusion
 
 **Task:** predict eval-zone TVT (True Vertical Thickness) for horizontal wells. Metric: RMSE.
-**Final model:** `gbm_stack` (`configs/gbm_stack.yaml`) — seed-ensembled LGB+Cat — **CV 13.468 / public tbd**.
+**Final model:** `gbm_stack` (`configs/gbm_stack.yaml`) — seed-ensembled LGB+Cat — **CV 13.468 / public 13.288 (best on both)**.
 **Verdict:** at the input-limited ceiling. The remaining error is structurally irreducible with
 the data available at inference.
 
