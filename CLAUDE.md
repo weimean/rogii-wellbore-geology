@@ -49,10 +49,18 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | ~~+ typewell Geology~~ (REVERTED) | ~~12.985~~ | 13.927 | LEAKAGE — Geology is TRAIN-ONLY; feature absent in test → public got worse; notes/11 |
 | + seed-ensemble | 13.499 | 13.549 | LGB+Cat × 3 seeds each averaged; removes seed lottery; notes/CONCLUSION |
 | + blend 0.70 | 13.472 | 13.368 | re-tuned final blend; notes/CONCLUSION |
-| + blend 0.75 | 13.468 | 13.288 |
-| **+ adaptive blend (BEST)** | **13.453** | tbd | prefix-CV+lockbox confirm fusion over-weighted; notes/CONCLUSION |
+| + blend 0.75 | 13.468 | 13.288 | best public before the ceiling break |
+| ~~+ adaptive blend~~ (REVERTED) | ~~13.453~~ | 13.407 | train CV/lockbox liked it, public got WORSE; reverted to global w=0.75 |
+| **+ rich features (BREAKTHROUGH)** | **13.201** | tbd | multi-offset GR-match grids (top-team feature family); refuted the "ceiling"; notes/12 |
+| **+ neural-net (MLP) diversity** | **13.004** | tbd | 0.7·(LGB+Cat) + 0.3·MLP(256,128,64); different algo again; notes/12 |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): seed-ensembled LGB+Cat (3 seeds, step=5) ⊕ PF ⊕ A+B, final blend 0.75. **CV 13.468 / public 13.288.** See notes/CONCLUSION.md.
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): seed-ensembled LGB+Cat (3 seeds, step=5) ⊕ PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP**, final blend 0.75. **Pooled CV 13.004.** Public tbd (blocked on daily submit limit). See notes/approaches/12.
+- ⚠️ **The "13.52 ceiling" was FEATURE-POVERTY, not input-limited.** I declared an input-limited ceiling
+  multiple times based on testing features IN ISOLATION (each new feature ≈ +0.01). WRONG. Reproducing the
+  top teams' rich feature *family* (multi-offset GR-match grids `tda/tdpf/tdhmm{offset}` = horizontal GR
+  minus typewell-GR sampled at last_TVT+offset, across 11 offsets) in AGGREGATE + a strong model cleared
+  −0.27 (13.47→13.20). Then a neural net (different algo) cleared another −0.20 (13.20→13.00). **Lesson:
+  never conclude a ceiling from per-feature probes — test the full rich set with a strong model.**
 - 🚨 **Geology was LEAKAGE, REVERTED (notes/11):** the typewell `Geology` column is **TRAIN-ONLY** —
   test typewells have only `TVT, GR` (verified: all 3 example test typewells lack the column). The
   −0.53 CV/lockbox gain was real *on train* but the feature is **absent at inference** (`_geology_features`
@@ -67,20 +75,25 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 - Submit: kernel `kernel/` → `gtwm98/rogii-hmm-fusion` (v7 = phase-2). `kaggle competitions submit <comp>
   -k <kernel> -v <n> -f submission.csv -m ...`.
 
-## ⭐ THE CEILING (proven by measurement — see notes/CONCLUSION.md, notes/09-11)
-**13.520 is the input-limited ceiling.** Error budget = 68% LEVEL + 15% trend + 18% wiggle. Both level
-and trend are **geology-locked**: TVT = f(Z, formation tops) with per-well R²=1.0, but f is per-well
-(each well's own datum) and the tops/Geology are **TRAIN-ONLY**. The eval level is a per-well constant
-in a reference frame the test set withholds — even ORACLE tops add only +0.014 to the offset. The 18%
-wiggle is saturated (HMM+PF+LGB+Cat); the residual has NO directional signal in any available feature.
-There is no honest headroom of consequence. The public ~7 scores are leak/pretrained-artifact-driven,
-NOT reproducible via method (we replicated the same-well override → nothing; their datum/spatial-tops
-ideas fail on our CV).
+## ⚠️ THE "CEILING" WAS FALSE — it was feature-poverty (see notes/approaches/12)
+**There is no 13.52 ceiling.** I repeatedly declared "13.52 is the input-limited ceiling" from
+per-feature probes (each new feature ≈ +0.01, error budget 68% LEVEL / 15% trend / 18% wiggle). That
+reasoning was WRONG: individual features are weak, but the top teams' rich feature **family** in
+aggregate + a strong model is not. Reproducing multi-offset GR-match grids cleared −0.27 (13.47→13.20),
+then a neural net another −0.20 (13.20→13.00). Real headroom remains toward the top teams' honest OOF
+~11.1 (their public ~7 has an extra ~4-pt leak-flavored boost we do NOT chase). **Method that beat the
+"ceiling": stop probing features one at a time — build the whole rich family and let the model use it.**
+- Still true: level/trend ARE mostly geology-locked and Geology/tops are TRAIN-ONLY (don't build on them
+  as labels). But the GR *signal itself* (typewell GR vs horizontal GR, sampled across many TVT offsets)
+  is available at inference and carries far more than the isolated probes suggested.
 
 ## Key winning principle
 Ensemble diversity must come from a **DIFFERENT ALGORITHM**, not a restatement. Self-ref HMM (same algo)
 = redundant (+0.001); the particle filter (different algo) = complementary (+0.24). LGB+Cat over HistGBM
-same idea. Subsampling eval rows regularizes (the dense rows overfit).
+same idea. The **MLP** (neural net, different function class) added −0.20 pooled on top of LGB+Cat even
+though it's worse alone (corr 0.64). Subsampling eval rows regularizes (the dense rows overfit).
+**AND: build feature FAMILIES, not one-off features** — a family of 40+ multi-offset GR-match columns
+cleared −0.27 where each isolated probe read ≈ +0.01. The ceiling I kept declaring was feature-poverty.
 
 ## Closed levers (don't re-investigate — see notes/CONCLUSION.md)
 - Level: velocity/spatial-KNN/GR-alignment/global-datum all die at offset R²≈0.10 (`level_probe`, `level_align`).
