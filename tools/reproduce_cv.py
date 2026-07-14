@@ -61,13 +61,15 @@ def main():
 
     # 3) OOF stack correction — LightGBM+CatBoost on step=5 subsampled rows (production config),
     #    0.6-blend with fusion. Subsampling regularizes; two boosters add diversity (notes/10).
-    log("OOF stack (LightGBM + CatBoost, step=5)...")
+    log("OOF stack (LGB+Cat seed-ens + MLP, step=5)...")
     import lightgbm as lgb
     from catboost import CatBoostRegressor
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.neural_network import MLPRegressor
     step = 5
     idx_in_well = np.concatenate([np.arange((g == i).sum()) for i in range(g.max() + 1)])
     sub = (idx_in_well % step) == 0
-    oof_gbm = np.zeros(len(y))
+    oof_gbm = np.zeros(len(y)); oof_mlp = np.zeros(len(y))
     for tr, va in gkf.split(X, groups=g):
         ti = tr[sub[tr]]
         ps = []
@@ -78,7 +80,13 @@ def main():
             ps.append(CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
                       rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X[ti], y[ti]).predict(X[va]))
         oof_gbm[va] = np.mean(ps, axis=0)
-    gbm_stack = 0.75 * (anchor + oof_gbm) + 0.25 * fusion
+        Xn = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0); scaler = StandardScaler().fit(Xn[ti])
+        tm = ti if len(ti) <= 200000 else np.random.default_rng(0).choice(ti, 200000, replace=False)
+        oof_mlp[va] = MLPRegressor(hidden_layer_sizes=(256, 128, 64), activation="relu", alpha=1e-3,
+                       batch_size=4096, learning_rate_init=1e-3, early_stopping=True, n_iter_no_change=8,
+                       max_iter=120, random_state=0).fit(scaler.transform(Xn[tm]), y[tm]).predict(scaler.transform(Xn[va]))
+    stack_pred = 0.7 * oof_gbm + 0.3 * oof_mlp
+    gbm_stack = 0.75 * (anchor + stack_pred) + 0.25 * fusion
 
     print("\n=== 773-well GroupKFold CV (global pooled RMSE) ===", flush=True)
     print(f"  ffill:            {score(truth, last):.3f}", flush=True)

@@ -607,6 +607,8 @@ def fit_gbm_stack(train_wells, level_model, step: int = GBM_STEP, seeds=(0, 1, 2
     dropped — it dilutes the held-out blend."""
     import lightgbm as lgb
     from catboost import CatBoostRegressor
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.neural_network import MLPRegressor
     X, y, dis = [], [], []
     for w in train_wells:
         f = _stack_features(w, level_model)
@@ -614,8 +616,7 @@ def fit_gbm_stack(train_wells, level_model, step: int = GBM_STEP, seeds=(0, 1, 2
             continue
         X.append(f["X"][::step]); y.append((f["truth"] - f["anchor"])[::step]); dis.append(f["mean_dis"])
     X = np.vstack(X); y = np.concatenate(y)
-    # Seed-ensemble (3 seeds each): the single-seed lockbox spread is ~0.08, so averaging removes
-    # the seed lottery and reduces variance (lockbox 13.505 -> 13.466). Robustness for the private LB.
+    # Seed-ensemble (3 seeds each): removes the ~0.08 single-seed lockbox lottery + reduces variance.
     models = []
     for sd in seeds:
         models.append(lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
@@ -623,7 +624,18 @@ def fit_gbm_stack(train_wells, level_model, step: int = GBM_STEP, seeds=(0, 1, 2
                       colsample_bytree=0.8, random_state=sd, n_jobs=-1, verbose=-1).fit(X, y))
         models.append(CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
                       rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X, y))
-    return {"models": models, "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
+    # Neural net (different function class) for DIVERSITY. Worse alone but blended 0.7/0.3 adds
+    # -0.20 pooled CV (13.20 -> 13.00) via decorrelated errors (corr 0.64). notes/13.
+    Xn = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+    scaler = StandardScaler().fit(Xn)
+    tm = np.arange(len(y)) if len(y) <= 200000 else np.random.default_rng(0).choice(len(y), 200000, replace=False)
+    Xs = scaler.transform(Xn[tm])
+    mlps = [MLPRegressor(hidden_layer_sizes=(256, 128, 64), activation="relu", alpha=1e-3,
+                         batch_size=4096, learning_rate_init=1e-3, early_stopping=True,
+                         n_iter_no_change=8, max_iter=120, random_state=sd).fit(Xs, y[tm])
+            for sd in (0, 1)]
+    return {"models": models, "mlps": mlps, "scaler": scaler,
+            "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
 
 
 def _adaptive_w(mean_dis, gbm, w0=0.70, slope=0.05, lo=0.55, hi=1.0):
@@ -640,9 +652,16 @@ def gbm_stack(well: Well, level_model, gbm, blend: float = 0.75) -> np.ndarray:
     out = baseline_ffill(well.horizontal).astype(float)
     if f is None:
         return out
-    pred = np.mean([m.predict(f["X"]) for m in gbm["models"]], axis=0)
+    gbm_pred = np.mean([m.predict(f["X"]) for m in gbm["models"]], axis=0)
+    if gbm.get("mlps"):  # 0.7 GBM + 0.3 MLP (neural diversity, -0.20 pooled; notes/13)
+        Xn = np.nan_to_num(f["X"], nan=0.0, posinf=0.0, neginf=0.0)
+        Xs = gbm["scaler"].transform(Xn)
+        mlp_pred = np.mean([m.predict(Xs) for m in gbm["mlps"]], axis=0)
+        pred = 0.7 * gbm_pred + 0.3 * mlp_pred
+    else:
+        pred = gbm_pred
     gbmA = f["anchor"] + pred
-    out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]  # global w=0.75; adaptive HURT public (v11 13.407 vs 13.288)
+    out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]  # global w=0.75 (adaptive hurt public)
     return out
 
 

@@ -440,6 +440,8 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     # diverse boosters; 3 seeds each averaged removes the seed lottery). Lockbox 13.77 -> 13.466.
     import lightgbm as lgb
     from catboost import CatBoostRegressor
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.neural_network import MLPRegressor
     X, y, dis = [], [], []
     for w in train_wells:
         f = _stack_features(w, level_model)
@@ -454,16 +456,30 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
                       colsample_bytree=0.8, random_state=sd, n_jobs=-1, verbose=-1).fit(X, y))
         models.append(CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
                       rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X, y))
-    return {"models": models, "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
+    # neural net for diversity (blended 0.7/0.3: -0.20 pooled, notes/13)
+    Xn = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+    scaler = StandardScaler().fit(Xn)
+    tm = np.arange(len(y)) if len(y) <= 200000 else np.random.default_rng(0).choice(len(y), 200000, replace=False)
+    Xs = scaler.transform(Xn[tm])
+    mlps = [MLPRegressor(hidden_layer_sizes=(256, 128, 64), activation="relu", alpha=1e-3,
+                         batch_size=4096, learning_rate_init=1e-3, early_stopping=True,
+                         n_iter_no_change=8, max_iter=120, random_state=sd).fit(Xs, y[tm])
+            for sd in (0, 1)]
+    return {"models": models, "mlps": mlps, "scaler": scaler,
+            "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
 
 
 def gbm_stack(well, level_model, gbm, blend=0.75):
-    # global w=0.75 (adaptive per-well blend HURT the public LB, reverted).
     f = _stack_features(well, level_model)
     out = baseline_ffill(well.horizontal).astype(float)
     if f is None:
         return out
-    pred = np.mean([m.predict(f["X"]) for m in gbm["models"]], axis=0)
+    gbm_pred = np.mean([m.predict(f["X"]) for m in gbm["models"]], axis=0)
+    if gbm.get("mlps"):
+        Xs = gbm["scaler"].transform(np.nan_to_num(f["X"], nan=0.0, posinf=0.0, neginf=0.0))
+        pred = 0.7 * gbm_pred + 0.3 * np.mean([m.predict(Xs) for m in gbm["mlps"]], axis=0)
+    else:
+        pred = gbm_pred
     gbmA = f["anchor"] + pred
     out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]
     return out
