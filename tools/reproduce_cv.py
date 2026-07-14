@@ -78,7 +78,7 @@ def main():
             ps.append(CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
                       rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X[ti], y[ti]).predict(X[va]))
         oof_gbm[va] = np.mean(ps, axis=0)
-    gbm_stack = 0.6 * (anchor + oof_gbm) + 0.4 * fusion
+    gbm_stack = 0.70 * (anchor + oof_gbm) + 0.30 * fusion
 
     print("\n=== 773-well GroupKFold CV (global pooled RMSE) ===", flush=True)
     print(f"  ffill:            {score(truth, last):.3f}", flush=True)

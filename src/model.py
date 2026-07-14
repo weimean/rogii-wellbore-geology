@@ -591,7 +591,7 @@ def fit_gbm_stack(train_wells, level_model, step: int = GBM_STEP, seeds=(0, 1, 2
     return {"models": models}
 
 
-def gbm_stack(well: Well, level_model, gbm, blend: float = 0.6) -> np.ndarray:
+def gbm_stack(well: Well, level_model, gbm, blend: float = 0.70) -> np.ndarray:
     """Blend the seed-ensembled (LightGBM+CatBoost)-corrected anchor with the variance fusion.
     Our best model — lockbox 13.466 (154 held-out wells, vs 13.77 for the old HistGBM)."""
     f = _stack_features(well, level_model)
