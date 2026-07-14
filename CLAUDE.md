@@ -27,7 +27,9 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 
 ## Validation discipline
 - **Always split by well** (`GroupKFold` on `WELLNAME`). Never leak rows across folds.
-- Report grouped-by-well CV RMSE. Trust CV over the stub public LB.
+- Report grouped-by-well CV RMSE. **CV and the public LB agree and are both trustworthy** — verified
+  by submitting a twin-matcher leak probe (public 13.604 == phase-2 13.601 → no exploitable leak in the
+  scored test). The 3 `data/raw/test/` wells are leaked EXAMPLES, not the scored set. See notes/CONCLUSION.md.
 
 ## Workflow
 - One config YAML per experiment; log every run in `experiments/log.md`.
@@ -43,10 +45,11 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | gbm_stack | 13.769 | 13.727 | HistGBM(HMM+level+trajectory) blend w/ fusion; notes/06 |
 | gbm_stack + PF | 13.530 | 13.854 | + bootstrap particle-filter features (diverse tracker); notes/07 |
 | gbm_stack + PF + A+B | 13.540 | — | + uncertainty (A) & GR-envelope (B) feats; kept by lockbox; notes/08 |
-| **+ LGB/Cat @ step=5 (BEST)** | **13.520** | 13.601 | LightGBM+CatBoost avg on 1/5-subsampled rows (drop HistGBM); notes/10 |
+| + LGB/Cat @ step=5 | 13.520 | 13.601 | LightGBM+CatBoost avg on 1/5-subsampled rows (drop HistGBM); notes/10 |
 | ~~+ typewell Geology~~ (REVERTED) | ~~12.985~~ | 13.927 | LEAKAGE — Geology is TRAIN-ONLY; feature absent in test → public got worse; notes/11 |
+| **+ seed-ensemble (BEST)** | **13.499** | tbd | LGB+Cat × 3 seeds each averaged; removes seed lottery + reduces variance; notes/CONCLUSION |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): LightGBM+CatBoost avg (step=5) ⊕ PF ⊕ A+B.
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): seed-ensembled LGB+Cat (3 seeds, step=5) ⊕ PF ⊕ A+B. **CV 13.499.** See notes/CONCLUSION.md.
 - 🚨 **Geology was LEAKAGE, REVERTED (notes/11):** the typewell `Geology` column is **TRAIN-ONLY** —
   test typewells have only `TVT, GR` (verified: all 3 example test typewells lack the column). The
   −0.53 CV/lockbox gain was real *on train* but the feature is **absent at inference** (`_geology_features`
@@ -56,36 +59,30 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
   **Lesson: verify a feature EXISTS at inference before building on it** — check `data/raw/test` columns.
 - **Phase 2 (notes/10):** subsample-as-regularization (train every 5th eval row) + LGB/Cat diversity
   (drop HistGBM): canonical 13.540→13.520, public 13.601 (best). Needs `lightgbm`+`catboost` (Kaggle image).
-- ⚠️ **~9 is NOT reachable** (notes/09): level (68%) + trend (15%) are geology-locked; 4 GR level levers
-  + slope all die at R²≈0. The geology *labels* would crack it but they're train-only. 18% wiggle is
-  saturated. 13.520 is at the input-limited ceiling.
-- ⚠️ **A+B is a wash on pooled CV** (−0.01) but improves the lockbox; Group C (NCC quality) was INERT.
-  `tools/frontier_cv.py` = lockbox harness; `tools/frontier_fast.py` = fast cached harness (step subsample);
-  `_cache_base.py`+`_cache_frontier.py` rebuild the /tmp caches (wiped on reboot).
-- ⚠️ **CV/public diverge**: PF improves CV (13.77→13.53) but public got worse (13.73→13.85).
-  Public LB = 3 leaked, non-representative wells → noise. Trust the 773-well OOF CV; it estimates
-  the private (~200-well) LB that decides ranking.
-- `uv run python -u tools/reproduce_cv.py` regenerates the CV table (~10 min).
-- Submit (code comp = notebook only): kernel in `kernel/`, pushed as `gtwm98/rogii-hmm-fusion`;
-  `kaggle competitions submit <comp> -k <kernel> -v <n> -f submission.csv -m ...`.
+- `uv run python -u tools/reproduce_cv.py` regenerates the CV table (~15 min). `tools/frontier_fast.py`
+  = fast cached harness; `tools/frontier_cv.py` = lockbox; `_cache_base.py` rebuilds /tmp caches (wiped on reboot).
+- Submit: kernel `kernel/` → `gtwm98/rogii-hmm-fusion` (v7 = phase-2). `kaggle competitions submit <comp>
+  -k <kernel> -v <n> -f submission.csv -m ...`.
 
-## ⭐ Key winning principle
-**Ensemble diversity must come from a DIFFERENT ALGORITHM, not a restatement of the same one.**
-The self-reference HMM (same grid-FB algo as the typewell HMM) was redundant (+0.001); the
-particle filter (different algo, same reference) was complementary (+0.24). This is the one
-lever that broke our plateau.
+## ⭐ THE CEILING (proven by measurement — see notes/CONCLUSION.md, notes/09-11)
+**13.520 is the input-limited ceiling.** Error budget = 68% LEVEL + 15% trend + 18% wiggle. Both level
+and trend are **geology-locked**: TVT = f(Z, formation tops) with per-well R²=1.0, but f is per-well
+(each well's own datum) and the tops/Geology are **TRAIN-ONLY**. The eval level is a per-well constant
+in a reference frame the test set withholds — even ORACLE tops add only +0.014 to the offset. The 18%
+wiggle is saturated (HMM+PF+LGB+Cat); the residual has NO directional signal in any available feature.
+There is no honest headroom of consequence. The public ~7 scores are leak/pretrained-artifact-driven,
+NOT reproducible via method (we replicated the same-well override → nothing; their datum/spatial-tops
+ideas fail on our CV).
 
-## Closed levers (don't re-investigate — see experiments/log.md + notes)
-- `.png` cross-sections: TRAIN-ONLY (0 test images) → cannot be an inference feature.
-- Structural geometry (datum D=TVT+Z): diverges — within-lateral Z–TVT decoupling.
-- Self-correlation / NCC (self-ref HMM, self-corr emission): redundant with the typewell HMM.
-- HMM resolution: finer HURTS (250-bin best). LightGBM/CatBoost: tie HistGBM (features not model).
-- HMM parameter tuning: OVERFITS (holdout worse than EDA defaults).
-- Tracker-diversity vein SATURATED: PF +0.24, self-PF only +0.07 (below LB noise floor, not shipped).
-- Public LB is 3 leaked wells → not representative; median 9.65 is inflated by notebook forks. Trust CV.
+## Key winning principle
+Ensemble diversity must come from a **DIFFERENT ALGORITHM**, not a restatement. Self-ref HMM (same algo)
+= redundant (+0.001); the particle filter (different algo) = complementary (+0.24). LGB+Cat over HistGBM
+same idea. Subsampling eval rows regularizes (the dense rows overfit).
 
-## Where the remaining headroom is (frontier-level, large build)
-Closing to the public-notebook tier (~7–9) needs their full pipeline: multi-scale NCC feeding a
-LightGBM+CatBoost stack + particle-filter/HMM blend + heavy tuning. Individual levers we can bolt
-onto our stack are now marginal/negative and below the public-LB noise floor — the gap is
-whole-pipeline engineering, not increments.
+## Closed levers (don't re-investigate — see notes/CONCLUSION.md)
+- Level: velocity/spatial-KNN/GR-alignment/global-datum all die at offset R²≈0.10 (`level_probe`, `level_align`).
+- Trend/slope: R²≈0 (`slope_probe`). Geology labels: strong but TRAIN-ONLY leak, reverted (notes/11);
+  inferring from GR is marginal (0.113). Formation tops: TRAIN-ONLY; oracle +0.014 (`tops_probe`).
+- Geosteering trajectory×GR, uncertainty shrinkage: residual-R²≈0, no gain (`residual_diag`, `shrink_test`).
+- `.png`: train-only. Self-correlation, HMM resolution/tuning: redundant/overfit. Datum U=T+Z: catastrophic (`datum_test`).
+- **Leak: NONE exploitable in the scored test** (twin-probe = phase-2; `kernel_leakprobe/`). Public LB is trustworthy.

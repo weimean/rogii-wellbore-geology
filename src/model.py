@@ -562,7 +562,7 @@ def _stack_features(well: Well, level_model, anchor_override=None):
 GBM_STEP = 5  # train on every GBM_STEP-th eval row per well (subsample-as-regularization)
 
 
-def fit_gbm_stack(train_wells, level_model, step: int = GBM_STEP):
+def fit_gbm_stack(train_wells, level_model, step: int = GBM_STEP, seeds=(0, 1, 2)):
     """Fit the diverse-booster stack on train wells (target = TVT - level anchor).
 
     Phase 2 (notes/10): trains a LightGBM + CatBoost pair (two genuinely different modern
@@ -579,22 +579,26 @@ def fit_gbm_stack(train_wells, level_model, step: int = GBM_STEP):
             continue
         X.append(f["X"][::step]); y.append((f["truth"] - f["anchor"])[::step])
     X = np.vstack(X); y = np.concatenate(y)
-    lgm = lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
-                            min_child_samples=200, reg_lambda=1.0, subsample=0.8, subsample_freq=1,
-                            colsample_bytree=0.8, random_state=0, n_jobs=-1, verbose=-1).fit(X, y)
-    cbm = CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
-                            rsm=0.8, random_seed=0, thread_count=-1, verbose=0).fit(X, y)
-    return {"lgb": lgm, "cat": cbm}
+    # Seed-ensemble (3 seeds each): the single-seed lockbox spread is ~0.08, so averaging removes
+    # the seed lottery and reduces variance (lockbox 13.505 -> 13.466). Robustness for the private LB.
+    models = []
+    for sd in seeds:
+        models.append(lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
+                      min_child_samples=200, reg_lambda=1.0, subsample=0.8, subsample_freq=1,
+                      colsample_bytree=0.8, random_state=sd, n_jobs=-1, verbose=-1).fit(X, y))
+        models.append(CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
+                      rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X, y))
+    return {"models": models}
 
 
 def gbm_stack(well: Well, level_model, gbm, blend: float = 0.6) -> np.ndarray:
-    """Blend the (LightGBM+CatBoost)-corrected anchor with the variance fusion.
-    Our best model — lockbox 13.505 (154 held-out wells, vs 13.77 for the old HistGBM)."""
+    """Blend the seed-ensembled (LightGBM+CatBoost)-corrected anchor with the variance fusion.
+    Our best model — lockbox 13.466 (154 held-out wells, vs 13.77 for the old HistGBM)."""
     f = _stack_features(well, level_model)
     out = baseline_ffill(well.horizontal).astype(float)
     if f is None:
         return out
-    pred = 0.5 * (gbm["lgb"].predict(f["X"]) + gbm["cat"].predict(f["X"]))
+    pred = np.mean([m.predict(f["X"]) for m in gbm["models"]], axis=0)
     gbmA = f["anchor"] + pred
     out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]
     return out

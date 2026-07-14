@@ -70,12 +70,14 @@ def main():
     oof_gbm = np.zeros(len(y))
     for tr, va in gkf.split(X, groups=g):
         ti = tr[sub[tr]]
-        lgm = lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
-                                min_child_samples=200, reg_lambda=1.0, subsample=0.8, subsample_freq=1,
-                                colsample_bytree=0.8, random_state=0, n_jobs=-1, verbose=-1).fit(X[ti], y[ti])
-        cbm = CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
-                                rsm=0.8, random_seed=0, thread_count=-1, verbose=0).fit(X[ti], y[ti])
-        oof_gbm[va] = 0.5 * (lgm.predict(X[va]) + cbm.predict(X[va]))
+        ps = []
+        for sd in (0, 1, 2):   # seed-ensemble (matches production fit_gbm_stack)
+            ps.append(lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
+                      min_child_samples=200, reg_lambda=1.0, subsample=0.8, subsample_freq=1,
+                      colsample_bytree=0.8, random_state=sd, n_jobs=-1, verbose=-1).fit(X[ti], y[ti]).predict(X[va]))
+            ps.append(CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
+                      rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X[ti], y[ti]).predict(X[va]))
+        oof_gbm[va] = np.mean(ps, axis=0)
     gbm_stack = 0.6 * (anchor + oof_gbm) + 0.4 * fusion
 
     print("\n=== 773-well GroupKFold CV (global pooled RMSE) ===", flush=True)
