@@ -427,7 +427,7 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     return {"models": models}
 
 
-def gbm_stack(well, level_model, gbm, blend=0.70):
+def gbm_stack(well, level_model, gbm, blend=0.75):
     f = _stack_features(well, level_model)
     out = baseline_ffill(well.horizontal).astype(float)
     if f is None:

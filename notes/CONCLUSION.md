@@ -1,7 +1,7 @@
 # ROGII Wellbore Geology — Final Conclusion
 
 **Task:** predict eval-zone TVT (True Vertical Thickness) for horizontal wells. Metric: RMSE.
-**Final model:** `gbm_stack` (`configs/gbm_stack.yaml`) — seed-ensembled LGB+Cat — **CV 13.472 / public 13.368 (best on both)**.
+**Final model:** `gbm_stack` (`configs/gbm_stack.yaml`) — seed-ensembled LGB+Cat — **CV 13.468 / public tbd**.
 **Verdict:** at the input-limited ceiling. The remaining error is structurally irreducible with
 the data available at inference.
 
@@ -22,7 +22,7 @@ per well ── LEVEL ANCHOR (Ridge on v50,v200,gr_off,eval_len,known_range) ─
               GBM STACK: mean(LightGBM×3 seeds, CatBoost×3 seeds) on target = TVT-anchor,
               trained on every 5th eval row (subsample = regularization)
                                     │
-              final = 0.70·(anchor + mean(6 boosters)) + 0.30·fusion   # blend re-tuned
+              final = 0.75·(anchor + mean(6 boosters)) + 0.25·fusion   # blend re-tuned (prefix-CV confirmed)
 ```
 
 Progression (773-well GroupKFold CV): ffill 15.91 → level_regression 15.33 → hmm_fusion 14.22 →
