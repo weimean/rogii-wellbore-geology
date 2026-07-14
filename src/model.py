@@ -486,6 +486,37 @@ def _geology_features(well: Well, hp_em: np.ndarray, last: float):
     return np.full(n, last_med - last), hmm_med - last, np.full(n, last_med)
 
 
+_ANCH_OFFS = [-80, -40, -20, -10, -5, 0, 5, 10, 20, 40, 80]
+_PF_OFFS = [-30, -15, -8, -4, -2, 0, 2, 4, 8, 15, 30]
+
+
+def _rich_cols(h, typewell, ei, hp_em, pp_em, last_tvt):
+    """Reproduced 7.016 features (test-legal): multi-offset GR-match grids (a GR-match profile
+    around last_tvt/PF/HMM) + finer multi-scale GR roll/lag/lead. CV 13.47->13.20 (notes/12)."""
+    import pandas as pd
+    tw_tvt = typewell["TVT"].to_numpy(float)
+    tw_gr = gaussian_filter1d(typewell["GR"].ffill().bfill().to_numpy(float), 3)
+    o = np.argsort(tw_tvt); tw_tvt, tw_gr = tw_tvt[o], tw_gr[o]
+    gr = h["GR"].interpolate(limit_direction="both").fillna(np.nanmean(tw_gr)).to_numpy(float)
+    gr_s = pd.Series(gaussian_filter1d(gr, 3)); hgr = gr_s.to_numpy()[ei]
+    cols = []
+    for off in _ANCH_OFFS:
+        cols.append(hgr - np.interp(last_tvt + off, tw_tvt, tw_gr))
+    for off in _PF_OFFS:
+        cols.append(hgr - np.interp(pp_em + off, tw_tvt, tw_gr))
+        cols.append(hgr - np.interp(hp_em + off, tw_tvt, tw_gr))
+    cols.append(hgr - np.interp(last_tvt, tw_tvt, tw_gr))
+    for wsz in [5, 21, 51, 101]:
+        r = gr_s.rolling(wsz, center=True, min_periods=1)
+        cols.append(r.mean().to_numpy()[ei]); cols.append(r.std().fillna(0).to_numpy()[ei])
+    for lag in [1, 5, 15, 30]:
+        cols.append(gr_s.shift(lag).bfill().to_numpy()[ei]); cols.append(gr_s.shift(-lag).ffill().to_numpy()[ei])
+    cols.append(gr_s.diff().fillna(0).to_numpy()[ei]); cols.append(gr_s.diff().diff().fillna(0).to_numpy()[ei])
+    cols.append(gr_s.rolling(21, center=True, min_periods=1).max().to_numpy()[ei])
+    cols.append(np.sqrt(np.maximum((gr_s ** 2).rolling(21, center=True, min_periods=1).mean(), 0)).to_numpy()[ei])
+    return cols
+
+
 def _stack_features(well: Well, level_model, anchor_override=None):
     """Per-eval-row feature matrix + anchor/fusion/ff arrays for the GBM stack.
     Returns None if the well is too short. Includes 'truth' only when TVT is present.
@@ -551,8 +582,11 @@ def _stack_features(well: Well, level_model, anchor_override=None):
               np.abs(np.gradient(gaussian_filter1d(ge, 5))) if len(ge) > 1 else np.zeros(len(ge))]
     # NOTE: typewell Geology is TRAIN-ONLY (test typewells have only TVT, GR). Geology LEVEL
     # features looked like a -0.53 CV win but were leakage — absent at inference (notes/11). Removed.
+    # --- Reproduced 7.016 rich features (notes/12): multi-offset GR-match grids + finer GR.
+    #     Biggest single gain since the HMM: pooled CV 13.47->13.20, lockbox 13.30->13.00. ---
+    r_cols = _rich_cols(h, well.typewell, ei, hp[em], pp[em], float(kt[-1]))
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
-                        + pf_cols + a_cols + b_cols)
+                        + pf_cols + a_cols + b_cols + r_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, ff=baseline_ffill(h), em=em,
                mean_dis=float(np.mean(a_absdiff)))  # per-well HMM-PF disagreement (adaptive blend)
     if "TVT" in h.columns:

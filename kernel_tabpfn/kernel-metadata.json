@@ -1,0 +1,4 @@
+{ "id": "gtwm98/rogii-tabpfn-test", "title": "ROGII TabPFN test", "code_file": "tabpfn_test.py",
+  "language": "python", "kernel_type": "script", "is_private": true, "enable_gpu": true,
+  "enable_internet": true, "dataset_sources": ["gtwm98/rogii-tabpfn-features"],
+  "competition_sources": [], "kernel_sources": [] }

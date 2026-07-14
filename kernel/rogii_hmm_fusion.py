@@ -341,6 +341,35 @@ def _geology_features(well, hp_em, last):
     return np.full(n, last_med - last), hmm_med - last, np.full(n, last_med)
 
 
+_ANCH_OFFS = [-80, -40, -20, -10, -5, 0, 5, 10, 20, 40, 80]
+_PF_OFFS = [-30, -15, -8, -4, -2, 0, 2, 4, 8, 15, 30]
+
+
+def _rich_cols(h, typewell, ei, hp_em, pp_em, last_tvt):
+    # reproduced 7.016 features: multi-offset GR-match grids + finer multi-scale GR (notes/12).
+    tw_tvt = typewell["TVT"].to_numpy(float)
+    tw_gr = gaussian_filter1d(typewell["GR"].ffill().bfill().to_numpy(float), 3)
+    o = np.argsort(tw_tvt); tw_tvt, tw_gr = tw_tvt[o], tw_gr[o]
+    gr = h["GR"].interpolate(limit_direction="both").fillna(np.nanmean(tw_gr)).to_numpy(float)
+    gr_s = pd.Series(gaussian_filter1d(gr, 3)); hgr = gr_s.to_numpy()[ei]
+    cols = []
+    for off in _ANCH_OFFS:
+        cols.append(hgr - np.interp(last_tvt + off, tw_tvt, tw_gr))
+    for off in _PF_OFFS:
+        cols.append(hgr - np.interp(pp_em + off, tw_tvt, tw_gr))
+        cols.append(hgr - np.interp(hp_em + off, tw_tvt, tw_gr))
+    cols.append(hgr - np.interp(last_tvt, tw_tvt, tw_gr))
+    for wsz in [5, 21, 51, 101]:
+        r = gr_s.rolling(wsz, center=True, min_periods=1)
+        cols.append(r.mean().to_numpy()[ei]); cols.append(r.std().fillna(0).to_numpy()[ei])
+    for lag in [1, 5, 15, 30]:
+        cols.append(gr_s.shift(lag).bfill().to_numpy()[ei]); cols.append(gr_s.shift(-lag).ffill().to_numpy()[ei])
+    cols.append(gr_s.diff().fillna(0).to_numpy()[ei]); cols.append(gr_s.diff().diff().fillna(0).to_numpy()[ei])
+    cols.append(gr_s.rolling(21, center=True, min_periods=1).max().to_numpy()[ei])
+    cols.append(np.sqrt(np.maximum((gr_s ** 2).rolling(21, center=True, min_periods=1).mean(), 0)).to_numpy()[ei])
+    return cols
+
+
 def _stack_features(well, level_model):
     h = well.horizontal
     kn = h[h[TARGET_INPUT].notna()]; ev = h[h[TARGET_INPUT].isna()]
@@ -397,8 +426,9 @@ def _stack_features(well, level_model):
               gser.rolling(151, center=True, min_periods=1).std().fillna(0).to_numpy(),
               np.abs(np.gradient(gaussian_filter1d(ge, 5))) if len(ge) > 1 else np.zeros(len(ge))]
     # typewell Geology is TRAIN-ONLY (test typewells lack it) -> geology feats were leakage. Removed.
+    r_cols = _rich_cols(h, well.typewell, ei, hp[em], pp[em], float(kt[-1]))  # reproduced 7.016 feats (notes/12)
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
-                        + pf_cols + a_cols + b_cols)
+                        + pf_cols + a_cols + b_cols + r_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, em=em, mean_dis=float(np.mean(a_absdiff)))
     if "TVT" in h.columns:
         res["truth"] = ev["TVT"].values
