@@ -48,7 +48,7 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | + LGB/Cat @ step=5 | 13.520 | 13.601 | LightGBM+CatBoost avg on 1/5-subsampled rows (drop HistGBM); notes/10 |
 | ~~+ typewell Geology~~ (REVERTED) | ~~12.985~~ | 13.927 | LEAKAGE — Geology is TRAIN-ONLY; feature absent in test → public got worse; notes/11 |
 | + seed-ensemble | 13.499 | 13.549 | LGB+Cat × 3 seeds each averaged; removes seed lottery; notes/CONCLUSION |
-| **+ blend 0.70 (BEST)** | **13.472** | tbd | re-tuned final blend (fusion was over-weighted); notes/CONCLUSION |
+| **+ blend 0.70 (BEST)** | **13.472** | **13.368** | re-tuned final blend (fusion was over-weighted); notes/CONCLUSION |
 
 - **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): seed-ensembled LGB+Cat (3 seeds, step=5) ⊕ PF ⊕ A+B, final blend 0.70. **CV 13.472.** See notes/CONCLUSION.md.
 - 🚨 **Geology was LEAKAGE, REVERTED (notes/11):** the typewell `Geology` column is **TRAIN-ONLY** —
