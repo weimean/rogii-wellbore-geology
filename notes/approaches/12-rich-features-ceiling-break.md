@@ -41,3 +41,22 @@ Never conclude "ceiling" from per-feature probes; test the full rich feature set
   (not the direct reconstruction we tried and failed).
 - **TabICL** (GPU; needs a token or koolbox-offline install). Their best single model.
 See [[level-ceiling]] (corrected), notes/09-11.
+
+## 6. Neural-net (MLP) diversity — the second lever (2026-07-15)
+"Have we tried a neural net?" — no. Added a plain sklearn `MLPRegressor((256,128,64), relu, alpha=1e-3,
+early_stopping)` on the same 91-feature matrix (StandardScaler, 200k-subsample train for speed). No torch,
+so it runs on the Kaggle CPU/GPU image.
+
+| | pooled CV (w=0.75) | note |
+|----|----|----|
+| LGB+Cat (seed-ens) | 13.201 | rich features |
+| MLP alone | 14.652 | worse alone — expected |
+| **0.7·GBM + 0.3·MLP** | **13.004** | −0.20; corr(GBM,MLP)=0.64 |
+
+Same principle as the particle filter: diversity from a **different function class** helps even when the
+new model is worse alone. Lockbox OVERSTATED the gain (−0.58 → 12.41); the pooled 773-well read (−0.20)
+is the honest one. Productionized in `src/model.py::fit_gbm_stack`/`gbm_stack` + kernel mirror; submit
+smoke-test clean (14,151 rows, NaN=0). Public read: kernel v13, pending daily-limit reset.
+
+**Discipline note:** two CV-good/public-bad episodes (geology leak, adaptive blend) mean the public LB is
+the arbiter. Confirm v13's public score before stacking more speculative features on this −0.47 gain.
