@@ -599,7 +599,7 @@ def _adaptive_w(mean_dis, gbm, w0=0.70, slope=0.05, lo=0.55, hi=1.0):
     return float(np.clip(w0 + slope * z, lo, hi))
 
 
-def gbm_stack(well: Well, level_model, gbm, blend: float | None = None) -> np.ndarray:
+def gbm_stack(well: Well, level_model, gbm, blend: float = 0.75) -> np.ndarray:
     """Blend the seed-ensembled (LightGBM+CatBoost)-corrected anchor with the variance fusion,
     using a per-well ADAPTIVE blend (less fusion where HMM/PF disagree). Our best model."""
     f = _stack_features(well, level_model)
@@ -608,8 +608,7 @@ def gbm_stack(well: Well, level_model, gbm, blend: float | None = None) -> np.nd
         return out
     pred = np.mean([m.predict(f["X"]) for m in gbm["models"]], axis=0)
     gbmA = f["anchor"] + pred
-    w = blend if blend is not None else _adaptive_w(f["mean_dis"], gbm)
-    out[f["em"]] = w * gbmA + (1 - w) * f["fusion"]
+    out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]  # global w=0.75; adaptive HURT public (v11 13.407 vs 13.288)
     return out
 
 

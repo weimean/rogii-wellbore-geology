@@ -52,7 +52,7 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | + blend 0.75 | 13.468 | 13.288 |
 | **+ adaptive blend (BEST)** | **13.453** | tbd | prefix-CV+lockbox confirm fusion over-weighted; notes/CONCLUSION |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): seed-ensembled LGB+Cat (3 seeds, step=5) ⊕ PF ⊕ A+B, adaptive per-well blend. **CV 13.453.** See notes/CONCLUSION.md.
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): seed-ensembled LGB+Cat (3 seeds, step=5) ⊕ PF ⊕ A+B, final blend 0.75. **CV 13.468 / public 13.288.** See notes/CONCLUSION.md.
 - 🚨 **Geology was LEAKAGE, REVERTED (notes/11):** the typewell `Geology` column is **TRAIN-ONLY** —
   test typewells have only `TVT, GR` (verified: all 3 example test typewells lack the column). The
   −0.53 CV/lockbox gain was real *on train* but the feature is **absent at inference** (`_geology_features`

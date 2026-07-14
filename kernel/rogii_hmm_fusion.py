@@ -427,17 +427,14 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     return {"models": models, "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
 
 
-def gbm_stack(well, level_model, gbm, blend=None):
-    # ADAPTIVE per-well blend: less HMM/PF fusion where HMM & PF disagree (uncertain wells).
+def gbm_stack(well, level_model, gbm, blend=0.75):
+    # global w=0.75 (adaptive per-well blend HURT the public LB, reverted).
     f = _stack_features(well, level_model)
     out = baseline_ffill(well.horizontal).astype(float)
     if f is None:
         return out
     pred = np.mean([m.predict(f["X"]) for m in gbm["models"]], axis=0)
     gbmA = f["anchor"] + pred
-    if blend is None:
-        z = (f["mean_dis"] - gbm.get("dis_mean", f["mean_dis"])) / gbm.get("dis_std", 1.0)
-        blend = float(np.clip(0.70 + 0.05 * z, 0.55, 1.0))
     out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]
     return out
 
