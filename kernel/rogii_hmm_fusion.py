@@ -399,7 +399,7 @@ def _stack_features(well, level_model):
     # typewell Geology is TRAIN-ONLY (test typewells lack it) -> geology feats were leakage. Removed.
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
                         + pf_cols + a_cols + b_cols)
-    res = dict(X=X, anchor=anchor, fusion=fusion, em=em)
+    res = dict(X=X, anchor=anchor, fusion=fusion, em=em, mean_dis=float(np.mean(a_absdiff)))
     if "TVT" in h.columns:
         res["truth"] = ev["TVT"].values
     return res
@@ -410,12 +410,12 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     # diverse boosters; 3 seeds each averaged removes the seed lottery). Lockbox 13.77 -> 13.466.
     import lightgbm as lgb
     from catboost import CatBoostRegressor
-    X, y = [], []
+    X, y, dis = [], [], []
     for w in train_wells:
         f = _stack_features(w, level_model)
         if f is None or "truth" not in f:
             continue
-        X.append(f["X"][::step]); y.append((f["truth"] - f["anchor"])[::step])
+        X.append(f["X"][::step]); y.append((f["truth"] - f["anchor"])[::step]); dis.append(f["mean_dis"])
     X = np.vstack(X); y = np.concatenate(y)
     models = []
     for sd in seeds:
@@ -424,16 +424,20 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
                       colsample_bytree=0.8, random_state=sd, n_jobs=-1, verbose=-1).fit(X, y))
         models.append(CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
                       rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X, y))
-    return {"models": models}
+    return {"models": models, "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
 
 
-def gbm_stack(well, level_model, gbm, blend=0.75):
+def gbm_stack(well, level_model, gbm, blend=None):
+    # ADAPTIVE per-well blend: less HMM/PF fusion where HMM & PF disagree (uncertain wells).
     f = _stack_features(well, level_model)
     out = baseline_ffill(well.horizontal).astype(float)
     if f is None:
         return out
     pred = np.mean([m.predict(f["X"]) for m in gbm["models"]], axis=0)
     gbmA = f["anchor"] + pred
+    if blend is None:
+        z = (f["mean_dis"] - gbm.get("dis_mean", f["mean_dis"])) / gbm.get("dis_std", 1.0)
+        blend = float(np.clip(0.70 + 0.05 * z, 0.55, 1.0))
     out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]
     return out
 

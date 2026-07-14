@@ -78,7 +78,12 @@ def main():
             ps.append(CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
                       rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X[ti], y[ti]).predict(X[va]))
         oof_gbm[va] = np.mean(ps, axis=0)
-    gbm_stack = 0.75 * (anchor + oof_gbm) + 0.25 * fusion
+    # adaptive per-well blend: less fusion where HMM/PF disagree (notes/CONCLUSION)
+    md_well = np.array([f["mean_dis"] for _, f in rows])
+    cnts = [len(f["truth"]) for _, f in rows]
+    zmd = (md_well - md_well.mean()) / (md_well.std() + 1e-9)
+    w_row = np.repeat(np.clip(0.70 + 0.05 * zmd, 0.55, 1.0), cnts)
+    gbm_stack = w_row * (anchor + oof_gbm) + (1 - w_row) * fusion
 
     print("\n=== 773-well GroupKFold CV (global pooled RMSE) ===", flush=True)
     print(f"  ffill:            {score(truth, last):.3f}", flush=True)
