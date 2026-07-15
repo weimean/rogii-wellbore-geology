@@ -45,3 +45,4 @@ Metric: **RMSE** (lower is better; Kaggle scores √MSE). Always report **groupe
 - **MLP diversity** (0.7·(LGB+Cat) + 0.3·MLP(256,128,64), sklearn, no torch): pooled 13.201→13.004 (−0.20; corr 0.64). Lockbox overstated it (−0.58); pooled is the honest read.
 - Production (src/model.py + kernel mirror): fit_gbm_stack now trains 2 MLP seeds + StandardScaler on a 200k subsample (matches validated config); gbm_stack blends 0.7 GBM / 0.3 MLP. Submit smoke-test clean (14,151 rows, NaN=0, TVT 11597-12232).
 - Public LB: BLOCKED on daily submit limit; push kernel v13 + submit after 00:00 UTC reset.
+- **v13 PUBLIC = 12.948** (ref 54704906) — CONFIRMED. Prev best public 13.288 → −0.34 on the real hidden test; public (12.948) even beats pooled CV (13.004). The rich-features + MLP ceiling break holds on the arbiter. Submit-fix: CLI `-k -v` without `-f` gives a spurious 400; pass file_name="submission.csv" via python `competition_submit_code`.

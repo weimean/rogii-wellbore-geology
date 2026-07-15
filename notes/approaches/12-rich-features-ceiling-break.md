@@ -56,7 +56,7 @@ so it runs on the Kaggle CPU/GPU image.
 Same principle as the particle filter: diversity from a **different function class** helps even when the
 new model is worse alone. Lockbox OVERSTATED the gain (−0.58 → 12.41); the pooled 773-well read (−0.20)
 is the honest one. Productionized in `src/model.py::fit_gbm_stack`/`gbm_stack` + kernel mirror; submit
-smoke-test clean (14,151 rows, NaN=0). Public read: kernel v13, pending daily-limit reset.
+smoke-test clean (14,151 rows, NaN=0). Public read: kernel v13 (ref 54704906) = **12.948** (prev best 13.288, -0.34). CONFIRMED on the hidden test.
 
 **Discipline note:** two CV-good/public-bad episodes (geology leak, adaptive blend) mean the public LB is
-the arbiter. Confirm v13's public score before stacking more speculative features on this −0.47 gain.
+the arbiter. v13 public = 12.948 CONFIRMED (both rich features and MLP hold on the hidden test). Cleared to build more.

@@ -51,10 +51,10 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | + blend 0.70 | 13.472 | 13.368 | re-tuned final blend; notes/CONCLUSION |
 | + blend 0.75 | 13.468 | 13.288 | best public before the ceiling break |
 | ~~+ adaptive blend~~ (REVERTED) | ~~13.453~~ | 13.407 | train CV/lockbox liked it, public got WORSE; reverted to global w=0.75 |
-| **+ rich features (BREAKTHROUGH)** | **13.201** | tbd | multi-offset GR-match grids (top-team feature family); refuted the "ceiling"; notes/12 |
-| **+ neural-net (MLP) diversity** | **13.004** | tbd | 0.7·(LGB+Cat) + 0.3·MLP(256,128,64); different algo again; notes/12 |
+| **+ rich features (BREAKTHROUGH)** | **13.201** | — | multi-offset GR-match grids (top-team feature family); refuted the "ceiling"; notes/12 |
+| **+ neural-net (MLP) diversity (BEST)** | **13.004** | **12.948** | 0.7·(LGB+Cat) + 0.3·MLP(256,128,64); different algo again; CONFIRMED on public; notes/12 |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): seed-ensembled LGB+Cat (3 seeds, step=5) ⊕ PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP**, final blend 0.75. **Pooled CV 13.004.** Public tbd (blocked on daily submit limit). See notes/approaches/12.
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): seed-ensembled LGB+Cat (3 seeds, step=5) ⊕ PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP**, final blend 0.75. **Pooled CV 13.004 / public 12.948** (kernel v13, ref 54704906). −0.34 public vs the prior 13.288 — the ceiling break holds on the hidden test. See notes/approaches/12.
 - ⚠️ **The "13.52 ceiling" was FEATURE-POVERTY, not input-limited.** I declared an input-limited ceiling
   multiple times based on testing features IN ISOLATION (each new feature ≈ +0.01). WRONG. Reproducing the
   top teams' rich feature *family* (multi-offset GR-match grids `tda/tdpf/tdhmm{offset}` = horizontal GR
