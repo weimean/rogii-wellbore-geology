@@ -378,21 +378,24 @@ def build_spatial_ref(wells):
     TRAIN-only but globally consistent, so imputing them at a well's X,Y from neighbour wells is
     test-legal. +0.05 pooled CV, safe (GBM gates on nndist). notes/13."""
     from scipy.spatial import cKDTree
-    pts, surf, wid = [], [], []
+    pts, surf, dref, wid = [], [], [], []
     for w in wells:
         h = w.horizontal
         if not all(f in h.columns for f in _FORMS):
             continue
         X = h["X"].to_numpy(); Y = h["Y"].to_numpy(); F = h[_FORMS].to_numpy()
+        T = h["TVT"].to_numpy() if "TVT" in h.columns else np.full(len(X), np.nan)
+        Z = h["Z"].to_numpy()
         m = np.isfinite(X) & np.isfinite(Y) & np.isfinite(F).all(1)
         idx = np.where(m)[0][::5]
         if len(idx) == 0:
             continue
         pts.append(np.column_stack([X[idx], Y[idx]])); surf.append(F[idx].mean(1))
-        wid.append(np.full(len(idx), w.name, dtype=object))
+        dref.append((T + Z)[idx]); wid.append(np.full(len(idx), w.name, dtype=object))
     if not pts:
         return None
-    return {"tree": cKDTree(np.vstack(pts)), "surf": np.concatenate(surf), "wid": np.concatenate(wid)}
+    return {"tree": cKDTree(np.vstack(pts)), "surf": np.concatenate(surf),
+            "dref": np.concatenate(dref), "wid": np.concatenate(wid)}
 
 
 def _spatial_cols(h, ei, em, self_name, ref):
@@ -400,16 +403,18 @@ def _spatial_cols(h, ei, em, self_name, ref):
     dist), sp_impd (imputed structural drift). Self-excluded (LOWO). Falls back to base when no
     close neighbour. notes/13."""
     n = int(em.sum())
-    drift = np.zeros(n, np.float64); nnd = np.full(n, 1e6); impd = np.zeros(n, np.float64)
+    drift = np.zeros(n, np.float64); nnd = np.full(n, 1e6)
+    impd = np.zeros(n, np.float64); nD = np.zeros(n, np.float64)
     if ref is None:
-        return drift, np.log1p(nnd), impd
+        return drift, np.log1p(nnd), impd, nD
     Ti = h[TARGET_INPUT].to_numpy(); Z = h["Z"].to_numpy()
     X = h["X"].to_numpy(); Y = h["Y"].to_numpy()
     pp = np.isfinite(Ti)
     if not pp.any():
-        return drift, np.log1p(nnd), impd
+        return drift, np.log1p(nnd), impd, nD
     b = np.where(pp)[0][-1]
     tree, surf, wid = ref["tree"], ref["surf"], ref["wid"]
+    dr = ref.get("dref")
     qrows = np.append(ei, b)
     qpts = np.column_stack([X[qrows], Y[qrows]])
     dd, ii = tree.query(np.nan_to_num(qpts, nan=1e9), k=40)
@@ -429,7 +434,11 @@ def _spatial_cols(h, ei, em, self_name, ref):
     impd = np.where(np.isfinite(di), di, 0.0)
     nn_ev = dd[:n, 0]
     nnd = np.where(np.isfinite(nn_ev), nn_ev, 1e6)
-    return drift, np.log1p(nnd), impd
+    if dr is not None:  # neighbour-TVT-direct, ABSOLUTE datum (twin level, not anchored). notes/13.
+        impD = (wgt * dr[ii]).sum(1) / np.where(wsum > 0, wsum, np.nan)
+        nD_abs = impD[:n] - Z[ei]
+        nD = np.where(np.isfinite(nD_abs), nD_abs - float(Ti[b]), 0.0)
+    return drift, np.log1p(nnd), impd, nD
 
 
 def _stack_features(well, level_model, spatial_ref=None):
@@ -489,8 +498,8 @@ def _stack_features(well, level_model, spatial_ref=None):
               np.abs(np.gradient(gaussian_filter1d(ge, 5))) if len(ge) > 1 else np.zeros(len(ge))]
     # typewell Geology is TRAIN-ONLY (test typewells lack it) -> geology feats were leakage. Removed.
     r_cols = _rich_cols(h, well.typewell, ei, hp[em], pp[em], float(kt[-1]))  # reproduced 7.016 feats (notes/12)
-    sp_drift, sp_nndist, sp_impd = _spatial_cols(h, ei, em, well.name, spatial_ref)  # notes/13
-    s_cols = [sp_drift, sp_nndist, sp_impd]
+    sp_drift, sp_nndist, sp_impd, sp_nD = _spatial_cols(h, ei, em, well.name, spatial_ref)  # notes/13
+    s_cols = [sp_drift, sp_nndist, sp_impd, sp_nD]
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
                         + pf_cols + a_cols + b_cols + r_cols + s_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, em=em, mean_dis=float(np.mean(a_absdiff)))
