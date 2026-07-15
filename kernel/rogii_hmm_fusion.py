@@ -370,7 +370,69 @@ def _rich_cols(h, typewell, ei, hp_em, pp_em, last_tvt):
     return cols
 
 
-def _stack_features(well, level_model):
+_FORMS = ["ANCC", "ASTNU", "ASTNL", "EGFDU", "EGFDL", "BUDA"]
+
+
+def build_spatial_ref(wells):
+    """Reference cloud (X,Y)->mean formation surface, tagged by well name. Formation surfaces are
+    TRAIN-only but globally consistent, so imputing them at a well's X,Y from neighbour wells is
+    test-legal. +0.05 pooled CV, safe (GBM gates on nndist). notes/13."""
+    from scipy.spatial import cKDTree
+    pts, surf, wid = [], [], []
+    for w in wells:
+        h = w.horizontal
+        if not all(f in h.columns for f in _FORMS):
+            continue
+        X = h["X"].to_numpy(); Y = h["Y"].to_numpy(); F = h[_FORMS].to_numpy()
+        m = np.isfinite(X) & np.isfinite(Y) & np.isfinite(F).all(1)
+        idx = np.where(m)[0][::5]
+        if len(idx) == 0:
+            continue
+        pts.append(np.column_stack([X[idx], Y[idx]])); surf.append(F[idx].mean(1))
+        wid.append(np.full(len(idx), w.name, dtype=object))
+    if not pts:
+        return None
+    return {"tree": cKDTree(np.vstack(pts)), "surf": np.concatenate(surf), "wid": np.concatenate(wid)}
+
+
+def _spatial_cols(h, ei, em, self_name, ref):
+    """sp_drift (boundary-anchored spatial TVT pred - ffill), sp_nndist (log nearest other-well
+    dist), sp_impd (imputed structural drift). Self-excluded (LOWO). Falls back to base when no
+    close neighbour. notes/13."""
+    n = int(em.sum())
+    drift = np.zeros(n, np.float64); nnd = np.full(n, 1e6); impd = np.zeros(n, np.float64)
+    if ref is None:
+        return drift, np.log1p(nnd), impd
+    Ti = h[TARGET_INPUT].to_numpy(); Z = h["Z"].to_numpy()
+    X = h["X"].to_numpy(); Y = h["Y"].to_numpy()
+    pp = np.isfinite(Ti)
+    if not pp.any():
+        return drift, np.log1p(nnd), impd
+    b = np.where(pp)[0][-1]
+    tree, surf, wid = ref["tree"], ref["surf"], ref["wid"]
+    qrows = np.append(ei, b)
+    qpts = np.column_stack([X[qrows], Y[qrows]])
+    dd, ii = tree.query(np.nan_to_num(qpts, nan=1e9), k=40)
+    same = wid[ii] == self_name
+    dd = np.where(same, np.inf, dd)
+    order = np.argsort(dd, axis=1)
+    dd = np.take_along_axis(dd, order, 1)[:, :8]
+    ii = np.take_along_axis(ii, order, 1)[:, :8]
+    wgt = 1.0 / (dd + 1.0); wsum = wgt.sum(1)
+    imp = (wgt * surf[ii]).sum(1) / np.where(wsum > 0, wsum, np.nan)
+    imp_ev = imp[:n]; imp_bnd = imp[n]
+    Db = Ti[b] + Z[b]
+    sp_pred = imp_ev + (Db - imp_bnd) - Z[ei]
+    ok = np.isfinite(sp_pred)
+    drift = np.where(ok, sp_pred - float(Ti[b]), 0.0)
+    di = imp_ev - imp_bnd
+    impd = np.where(np.isfinite(di), di, 0.0)
+    nn_ev = dd[:n, 0]
+    nnd = np.where(np.isfinite(nn_ev), nn_ev, 1e6)
+    return drift, np.log1p(nnd), impd
+
+
+def _stack_features(well, level_model, spatial_ref=None):
     h = well.horizontal
     kn = h[h[TARGET_INPUT].notna()]; ev = h[h[TARGET_INPUT].isna()]
     em = well.eval_mask.to_numpy()
@@ -427,8 +489,10 @@ def _stack_features(well, level_model):
               np.abs(np.gradient(gaussian_filter1d(ge, 5))) if len(ge) > 1 else np.zeros(len(ge))]
     # typewell Geology is TRAIN-ONLY (test typewells lack it) -> geology feats were leakage. Removed.
     r_cols = _rich_cols(h, well.typewell, ei, hp[em], pp[em], float(kt[-1]))  # reproduced 7.016 feats (notes/12)
+    sp_drift, sp_nndist, sp_impd = _spatial_cols(h, ei, em, well.name, spatial_ref)  # notes/13
+    s_cols = [sp_drift, sp_nndist, sp_impd]
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
-                        + pf_cols + a_cols + b_cols + r_cols)
+                        + pf_cols + a_cols + b_cols + r_cols + s_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, em=em, mean_dis=float(np.mean(a_absdiff)))
     if "TVT" in h.columns:
         res["truth"] = ev["TVT"].values
@@ -442,9 +506,10 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     from catboost import CatBoostRegressor
     from sklearn.preprocessing import StandardScaler
     from sklearn.neural_network import MLPRegressor
+    spatial_ref = build_spatial_ref(train_wells)  # notes/13: impute each well from its neighbours
     X, y, dis = [], [], []
     for w in train_wells:
-        f = _stack_features(w, level_model)
+        f = _stack_features(w, level_model, spatial_ref=spatial_ref)
         if f is None or "truth" not in f:
             continue
         X.append(f["X"][::step]); y.append((f["truth"] - f["anchor"])[::step]); dis.append(f["mean_dis"])
@@ -465,12 +530,12 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
                          batch_size=4096, learning_rate_init=1e-3, early_stopping=True,
                          n_iter_no_change=8, max_iter=120, random_state=sd).fit(Xs, y[tm])
             for sd in (0, 1)]
-    return {"models": models, "mlps": mlps, "scaler": scaler,
+    return {"models": models, "mlps": mlps, "scaler": scaler, "spatial_ref": spatial_ref,
             "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
 
 
 def gbm_stack(well, level_model, gbm, blend=0.75):
-    f = _stack_features(well, level_model)
+    f = _stack_features(well, level_model, spatial_ref=gbm.get("spatial_ref"))
     out = baseline_ffill(well.horizontal).astype(float)
     if f is None:
         return out
