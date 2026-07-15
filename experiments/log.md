@@ -59,3 +59,8 @@ Metric: **RMSE** (lower is better; Kaggle scores √MSE). Always report **groupe
 - LEGITIMATE (not a target leak): uses the NEIGHBOUR's structural surfaces + this well's Z + its pre-PS offset; never the eval target. This is the top teams' spatial/offset-well edge.
 - **Lesson: grouped CV is PESSIMISTIC for spatial/offset-well features** — it strips the very neighbours the feature needs. Do not judge a spatial feature by grouped CV alone; the public LB is the real read.
 - OPENS the path to top-team ~7-11: the crude mean-surface drift gave −1.11; the oracle is 0.01. Stronger imputation (neighbour TVT directly, all 6 surfaces, full-eval reconstruction) should push much further.
+
+## Twin-shot v15 (neighbour-TVT-direct absolute datum) — REVERTED (2026-07-15)
+- v15 public = **11.988** (ref 54720860), WORSE than v14's 11.839 (+0.15). Reverted to v14.
+- Two findings (both from local analysis, cheaply): (1) boundary-anchored neighbour-D is REDUNDANT with sp_drift — TVT~formation-surfaces are linearly locked (R²=1.0), so their anchored drifts are identical. (2) The non-anchored ABSOLUTE twin level is genuinely different but only helps for a same-datum twin (already captured by v14 where the twin is tight) and is ±150ft garbage for different-datum neighbours; the nndist gate didn't fully suppress it → slight hurt.
+- **Conclusion: v14 (public 11.839) already saturates the offset-well/twin signal.** The tight twins that drive the −1.11 are captured by the boundary-anchored surface drift; there's no further honest headroom via neighbour imputation. Locking v14 as best.

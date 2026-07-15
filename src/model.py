@@ -526,25 +526,22 @@ def build_spatial_ref(wells):
     depths, so imputing them at a well's X,Y from NEIGHBOUR wells is test-legal (never touches
     the well's own — absent-at-test — formation columns). notes/13."""
     from scipy.spatial import cKDTree
-    pts, surf, dref, wid = [], [], [], []
+    pts, surf, wid = [], [], []
     for w in wells:
         h = w.horizontal
         if not all(f in h.columns for f in _FORMS):
             continue
         X = h["X"].to_numpy(); Y = h["Y"].to_numpy(); F = h[_FORMS].to_numpy()
-        T = h["TVT"].to_numpy() if "TVT" in h.columns else np.full(len(X), np.nan)
-        Z = h["Z"].to_numpy()
         m = np.isfinite(X) & np.isfinite(Y) & np.isfinite(F).all(1)
         idx = np.where(m)[0][::5]
         if len(idx) == 0:
             continue
         pts.append(np.column_stack([X[idx], Y[idx]])); surf.append(F[idx].mean(1))
-        dref.append((T + Z)[idx])                      # neighbour datum D=TVT+Z (twin-direct signal)
         wid.append(np.full(len(idx), w.name, dtype=object))
     if not pts:
         return None
-    pts = np.vstack(pts); surf = np.concatenate(surf); dref = np.concatenate(dref); wid = np.concatenate(wid)
-    return {"tree": cKDTree(pts), "surf": surf, "dref": dref, "wid": wid}
+    pts = np.vstack(pts); surf = np.concatenate(surf); wid = np.concatenate(wid)
+    return {"tree": cKDTree(pts), "surf": surf, "wid": wid}
 
 
 def _spatial_cols(h, ei, em, self_name, ref):
@@ -553,18 +550,16 @@ def _spatial_cols(h, ei, em, self_name, ref):
     (imputed structural drift). Excludes self_name from the cloud (LOWO at fit; a test well is
     simply absent). Mirrors _cache_spatial.py. +0.05 pooled CV, safe (GBM gates on nndist)."""
     n = int(em.sum())
-    drift = np.zeros(n, np.float64); nnd = np.full(n, 1e6)
-    impd = np.zeros(n, np.float64); nD = np.zeros(n, np.float64)
+    drift = np.zeros(n, np.float64); nnd = np.full(n, 1e6); impd = np.zeros(n, np.float64)
     if ref is None:
-        return drift, np.log1p(nnd), impd, nD
+        return drift, np.log1p(nnd), impd
     Ti = h[TARGET_INPUT].to_numpy(); Z = h["Z"].to_numpy()
     X = h["X"].to_numpy(); Y = h["Y"].to_numpy()
     pp = np.isfinite(Ti)
     if not pp.any():
-        return drift, np.log1p(nnd), impd, nD
+        return drift, np.log1p(nnd), impd
     b = np.where(pp)[0][-1]
     tree, surf, wid = ref["tree"], ref["surf"], ref["wid"]
-    dr = ref.get("dref")
     qrows = np.append(ei, b)
     qpts = np.column_stack([X[qrows], Y[qrows]])
     dd, ii = tree.query(np.nan_to_num(qpts, nan=1e9), k=40)
@@ -585,15 +580,7 @@ def _spatial_cols(h, ei, em, self_name, ref):
     impd = np.where(np.isfinite(di), di, 0.0)
     nn_ev = dd[:n, 0]
     nnd = np.where(np.isfinite(nn_ev), nn_ev, 1e6)
-    # neighbour-TVT-direct (ABSOLUTE datum, NOT boundary-anchored): the neighbour's own D=TVT+Z
-    # applied to the target's Z gives the twin's absolute TVT here. Unlike sp_drift (anchored to the
-    # target's boundary), this carries the twin's LEVEL — near-oracle for a same-datum twin, garbage
-    # for a different-datum neighbour (gated by sp_nndist). notes/13.
-    if dr is not None:
-        impD = (wgt * dr[ii]).sum(1) / np.where(wsum > 0, wsum, np.nan)
-        nD_abs = impD[:n] - Z[ei]
-        nD = np.where(np.isfinite(nD_abs), nD_abs - last_tvt, 0.0)
-    return drift, np.log1p(nnd), impd, nD
+    return drift, np.log1p(nnd), impd
 
 
 def _stack_features(well: Well, level_model, anchor_override=None, spatial_ref=None):
@@ -667,8 +654,8 @@ def _stack_features(well: Well, level_model, anchor_override=None, spatial_ref=N
     # --- Spatial formation features (notes/13): impute the TRAIN-only structural surfaces at this
     #     well's X,Y from NEIGHBOUR wells; +0.05 pooled CV. Safe — GBM gates on sp_nndist, so a
     #     well with no close train neighbour falls back to the base prediction (can't hurt). ---
-    sp_drift, sp_nndist, sp_impd, sp_nD = _spatial_cols(h, ei, em, well.name, spatial_ref)
-    s_cols = [sp_drift, sp_nndist, sp_impd, sp_nD]
+    sp_drift, sp_nndist, sp_impd = _spatial_cols(h, ei, em, well.name, spatial_ref)
+    s_cols = [sp_drift, sp_nndist, sp_impd]
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
                         + pf_cols + a_cols + b_cols + r_cols + s_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, ff=baseline_ffill(h), em=em,
