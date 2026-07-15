@@ -62,3 +62,12 @@ path toward top-team ~7-11 — the crude mean-surface drift already gave −1.11
 TVT directly, all 6 surfaces separately, full-eval reconstruction toward the 0.01 oracle) should push much further.
 
 See [[diversity-and-ceiling]], notes/12.
+
+
+## 8. Twin-shot (v15) — REVERTED; v14 saturates the twin signal
+Tried strengthening toward the oracle with a neighbour-TVT-direct feature. Two cheap local findings:
+(1) boundary-anchored neighbour-D is REDUNDANT with sp_drift (TVT~surfaces linearly locked, R²=1.0 → identical
+drifts); (2) the non-anchored ABSOLUTE twin level is genuinely different but only helps where a same-datum twin
+is tight (already captured by v14) and is ±150 ft garbage for different-datum neighbours — the nndist gate
+didn't fully suppress it. v15 public = 11.988 (WORSE than 11.839) → reverted. **v14 already saturates the
+offset-well/twin edge; no further honest headroom via neighbour imputation.** BEST = v14, public 11.839.

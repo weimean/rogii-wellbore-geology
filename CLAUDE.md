@@ -59,9 +59,13 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | ~~+ adaptive blend~~ (REVERTED) | ~~13.453~~ | 13.407 | train CV/lockbox liked it, public got WORSE; reverted to global w=0.75 |
 | **+ rich features (BREAKTHROUGH)** | **13.201** | — | multi-offset GR-match grids (top-team feature family); refuted the "ceiling"; notes/12 |
 | **+ neural-net (MLP) diversity** | **13.004** | **12.948** | 0.7·(LGB+Cat) + 0.3·MLP(256,128,64); different algo again; CONFIRMED on public; notes/12 |
-| **+ spatial formation features (BREAKTHROUGH)** | **~12.95** | **11.839** | impute neighbour wells' structural surfaces; CV UNDERSTATED (grouped CV removes neighbours); public −1.11; kernel v14; notes/13 |
+| **+ spatial formation features (BEST, BREAKTHROUGH)** | **~12.95** | **11.839** | impute neighbour wells' structural surfaces; CV UNDERSTATED (grouped CV removes neighbours); public −1.11; kernel v14; notes/13 |
+| ~~+ neighbour-TVT-direct (twin abs datum)~~ (REVERTED) | — | 11.988 | v14 already saturates the twin signal; abs-level feature added noise; kernel v15 reverted; notes/13 |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`): seed-ensembled LGB+Cat (3 seeds, step=5) ⊕ PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP**, final blend 0.75. **Pooled CV 13.004 / public 12.948** (kernel v13, ref 54704906). −0.34 public vs the prior 13.288 — the ceiling break holds on the hidden test. See notes/approaches/12.
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`, kernel v14, ref 54717721): seed-ensembled LGB+Cat
+  (3 seeds, step=5) ⊕ PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP** ⊕ **spatial formation
+  features**, final blend 0.75. **Public 11.839** — from a starting ffill of 15.9, and 13.288 before this
+  session's rich-features/MLP/spatial run (−1.45 this session). See notes/approaches/12–13.
 - ⚠️ **The "13.52 ceiling" was FEATURE-POVERTY, not input-limited.** I declared an input-limited ceiling
   multiple times based on testing features IN ISOLATION (each new feature ≈ +0.01). WRONG. Reproducing the
   top teams' rich feature *family* (multi-offset GR-match grids `tda/tdpf/tdhmm{offset}` = horizontal GR
