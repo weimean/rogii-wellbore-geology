@@ -432,7 +432,123 @@ def _spatial_cols(h, ei, em, self_name, ref):
     return drift, np.log1p(nnd), impd
 
 
-def _stack_features(well, level_model, spatial_ref=None):
+def _seg_b_well(ktvt, kz, form_col):
+    bv = ktvt + kz - form_col; n = len(bv); b_full = float(np.median(bv))
+    b_late = float(np.median(bv[max(0, n - 50):])) if n >= 5 else b_full
+    w = np.exp(0.02 * np.arange(n)); w /= w.sum()
+    return b_full, b_late, float(np.dot(w, bv))
+
+
+class _FormationPlaneKNN:
+    """Offset-well datum lever (notes/14): per-well median formation surfaces -> local IDW plane fit
+    over k nearest OTHER wells -> formation surface at a query X,Y. Test-legal (needs only X,Y)."""
+    def __init__(self, wells, k=10):
+        from scipy.spatial import cKDTree
+        self.k = k; rows = []
+        for w in wells:
+            h = w.horizontal
+            if not all(c in h.columns for c in _FORMS):
+                continue
+            df = h[["X", "Y"] + _FORMS].dropna()
+            if len(df) == 0:
+                continue
+            row = {"wid": w.name, "x": float(df.X.median()), "y": float(df.Y.median())}
+            for c in _FORMS:
+                row[f"{c}_m"] = float(df[c].median())
+            rows.append(row)
+        self.df = pd.DataFrame(rows); self.wmap = {w: i for i, w in enumerate(self.df.wid)}
+        xy = self.df[["x", "y"]].to_numpy(); self.scale = np.where(xy.std(0) < 1e-3, 1., xy.std(0))
+        self.tree = cKDTree(xy / self.scale); self.xa = self.df.x.to_numpy(); self.ya = self.df.y.to_numpy()
+        self.fa = self.df[[f"{c}_m" for c in _FORMS]].to_numpy(np.float64)
+
+    def impute(self, xy_q, self_wid=None):
+        k = self.k; q = xy_q / self.scale; nf = min(k + 5, len(self.df))
+        dist, idx = self.tree.query(q, k=nf)
+        if self_wid in self.wmap:
+            dist = np.where(idx == self.wmap[self_wid], np.inf, dist)
+        ordr = np.argpartition(dist, min(k - 1, nf - 1), 1)[:, :k]
+        dk = np.take_along_axis(dist, ordr, 1); ik = np.take_along_axis(idx, ordr, 1)
+        vk = np.isfinite(dk); w = np.where(vk, 1. / (dk + 1e-3), 0.).astype(np.float64)
+        xn = self.xa[ik]; yn = self.ya[ik]; fn = self.fa[ik]; wx = w * xn; wy = w * yn
+        A = np.zeros((len(q), 3, 3))
+        A[:, 0, 0] = (wx * xn).sum(1); A[:, 0, 1] = (wx * yn).sum(1); A[:, 0, 2] = wx.sum(1)
+        A[:, 1, 0] = A[:, 0, 1]; A[:, 1, 1] = (wy * yn).sum(1); A[:, 1, 2] = wy.sum(1)
+        A[:, 2, 0] = A[:, 0, 2]; A[:, 2, 1] = A[:, 1, 2]; A[:, 2, 2] = w.sum(1)
+        A[:, 0, 0] += 1e-9; A[:, 1, 1] += 1e-9; A[:, 2, 2] += 1e-9
+        rhs = np.stack([(wx[:, :, None] * fn).sum(1), (wy[:, :, None] * fn).sum(1), (w[:, :, None] * fn).sum(1)], 1)
+        try:
+            coef = np.linalg.solve(A, rhs)
+        except Exception:
+            coef = np.stack([np.linalg.pinv(A[r]) @ rhs[r] for r in range(len(q))])
+        Xq = xy_q[:, 0]; Yq = xy_q[:, 1]
+        pred = (Xq[:, None] * coef[:, 0, :] + Yq[:, None] * coef[:, 1, :] + coef[:, 2, :]).astype(np.float32)
+        pred[~vk.any(1)] = self.fa.mean(0)
+        return pred, np.where(vk, dk, np.inf).min(1).astype(np.float32)
+
+
+class _DenseANCCImputer:
+    def __init__(self, wells, spw=60, k=20):
+        from scipy.spatial import cKDTree
+        self.k = k; xs, ys, an, wd = [], [], [], []
+        for w in wells:
+            h = w.horizontal
+            if "ANCC" not in h.columns:
+                continue
+            df = h[["X", "Y", "ANCC"]].dropna()
+            if len(df) == 0:
+                continue
+            ix = np.linspace(0, len(df) - 1, min(spw, len(df)), dtype=int); s = df.iloc[ix]
+            xs.append(s.X.values); ys.append(s.Y.values); an.append(s.ANCC.values); wd.extend([w.name] * len(s))
+        self.xy = np.column_stack([np.concatenate(xs), np.concatenate(ys)])
+        self.ancc = np.concatenate(an).astype(np.float32); self.wids = np.array(wd)
+        self.scale = np.where(self.xy.std(0) < 1e-3, 1., self.xy.std(0)); self.tree = cKDTree(self.xy / self.scale)
+
+    def impute(self, xy_q, self_wid=None, nfetch=5000):
+        k = self.k; xy_q = np.atleast_2d(xy_q); q = xy_q / self.scale; nf = min(nfetch, len(self.ancc))
+        dist, idx = self.tree.query(q, k=nf)
+        if self_wid:
+            dist = np.where(self.wids[idx] == self_wid, np.inf, dist)
+        ordr = np.argpartition(dist, min(k - 1, nf - 1), 1)[:, :k]
+        dk = np.take_along_axis(dist, ordr, 1); ik = np.take_along_axis(idx, ordr, 1)
+        vk = np.isfinite(dk); w = np.where(vk, 1. / (dk + 1e-3), 0.); sw = w.sum(1); safe = np.where(sw < 1e-9, 1., sw)
+        a = self.ancc[ik]; ap = (a * w).sum(1) / safe; ap = np.where(sw < 1e-9, float(self.ancc.mean()), ap)
+        var = ((a - ap[:, None]) ** 2 * w).sum(1) / safe
+        return ap.astype(np.float32), np.sqrt(np.maximum(var, 0.)).astype(np.float32), np.where(vk, dk, np.inf).min(1).astype(np.float32)
+
+
+def build_formation_ref(wells):
+    try:
+        FI = _FormationPlaneKNN(wells)
+        if len(FI.df) == 0:
+            return None
+        return {"FI": FI, "DI": _DenseANCCImputer(wells)}
+    except Exception:
+        return None
+
+
+def _formation_cols(h, ei, em, self_name, anchor, fref):
+    n = int(em.sum())
+    if fref is None:
+        return [np.zeros(n, np.float32)] * 22
+    Ti = h[TARGET_INPUT].to_numpy(); Z = h["Z"].to_numpy(); xy = h[["X", "Y"]].to_numpy()
+    eidx = np.where(em)[0]; kidx = np.where(np.isfinite(Ti))[0]
+    xy_e = xy[eidx]; xy_k = xy[kidx]; z_e = Z[eidx]; ktvt = Ti[kidx]; z_k = Z[kidx]
+    FI, DI = fref["FI"], fref["DI"]
+    form_e, knn_d = FI.impute(xy_e, self_wid=self_name); form_k, _ = FI.impute(xy_k, self_wid=self_name)
+    tvtF = []; tvtFw = []; tvtF50 = []
+    for fi in range(6):
+        bf, bl, bw = _seg_b_well(ktvt, z_k, form_k[:, fi])
+        tvtF.append((-z_e + form_e[:, fi] + bf - anchor).astype(np.float32))
+        tvtFw.append((-z_e + form_e[:, fi] + bw - anchor).astype(np.float32))
+        tvtF50.append((-z_e + form_e[:, fi] + bl - anchor).astype(np.float32))
+    d_e, dstd_e, d_dist = DI.impute(xy_e, self_wid=self_name); d_k, _, _ = DI.impute(xy_k, self_wid=self_name)
+    bfd, _, _ = _seg_b_well(ktvt, z_k, d_k)
+    tvt_dense = (-z_e + d_e + bfd - anchor).astype(np.float32)
+    return tvtF + tvtFw + tvtF50 + [tvt_dense, np.log1p(knn_d).astype(np.float32),
+                                    np.log1p(d_dist).astype(np.float32), dstd_e.astype(np.float32)]
+
+
+def _stack_features(well, level_model, spatial_ref=None, formation_ref=None):
     h = well.horizontal
     kn = h[h[TARGET_INPUT].notna()]; ev = h[h[TARGET_INPUT].isna()]
     em = well.eval_mask.to_numpy()
@@ -491,8 +607,9 @@ def _stack_features(well, level_model, spatial_ref=None):
     r_cols = _rich_cols(h, well.typewell, ei, hp[em], pp[em], float(kt[-1]))  # reproduced 7.016 feats (notes/12)
     sp_drift, sp_nndist, sp_impd = _spatial_cols(h, ei, em, well.name, spatial_ref)  # notes/13
     s_cols = [sp_drift, sp_nndist, sp_impd]
+    fcols = _formation_cols(h, ei, em, well.name, anchor, formation_ref)  # rich formation plane (notes/14)
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
-                        + pf_cols + a_cols + b_cols + r_cols + s_cols)
+                        + pf_cols + a_cols + b_cols + r_cols + s_cols + fcols)
     res = dict(X=X, anchor=anchor, fusion=fusion, em=em, mean_dis=float(np.mean(a_absdiff)))
     if "TVT" in h.columns:
         res["truth"] = ev["TVT"].values
@@ -507,9 +624,10 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     from sklearn.preprocessing import StandardScaler
     from sklearn.neural_network import MLPRegressor
     spatial_ref = build_spatial_ref(train_wells)  # notes/13: impute each well from its neighbours
+    formation_ref = build_formation_ref(train_wells)  # notes/14: FormationPlaneKNN + dense ANCC
     X, y, dis = [], [], []
     for w in train_wells:
-        f = _stack_features(w, level_model, spatial_ref=spatial_ref)
+        f = _stack_features(w, level_model, spatial_ref=spatial_ref, formation_ref=formation_ref)
         if f is None or "truth" not in f:
             continue
         X.append(f["X"][::step]); y.append((f["truth"] - f["anchor"])[::step]); dis.append(f["mean_dis"])
@@ -530,12 +648,12 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
                          batch_size=4096, learning_rate_init=1e-3, early_stopping=True,
                          n_iter_no_change=8, max_iter=120, random_state=sd).fit(Xs, y[tm])
             for sd in (0, 1)]
-    return {"models": models, "mlps": mlps, "scaler": scaler, "spatial_ref": spatial_ref,
+    return {"models": models, "mlps": mlps, "scaler": scaler, "spatial_ref": spatial_ref, "formation_ref": formation_ref,
             "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
 
 
 def gbm_stack(well, level_model, gbm, blend=0.75):
-    f = _stack_features(well, level_model, spatial_ref=gbm.get("spatial_ref"))
+    f = _stack_features(well, level_model, spatial_ref=gbm.get("spatial_ref"), formation_ref=gbm.get("formation_ref"))
     out = baseline_ffill(well.horizontal).astype(float)
     if f is None:
         return out
