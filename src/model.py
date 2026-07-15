@@ -685,13 +685,17 @@ def build_formation_ref(wells):
         return None
 
 
-def _formation_cols(h, ei, em, self_name, anchor, fref):
-    """Rich spatial formation features (notes/14): tvtF_{6} (b_full), tvtFw_{6} (b_wls), tvtF50_{6}
-    (b_late), tvt_dense — each as a CORRECTION to the anchor (≈ y where a close neighbour exists) —
-    plus plane_knn_d / dense_dist / dense_std gates. 22 columns. Returns zeros if fref is None."""
+_NFORM = 27  # feature count emitted by _formation_cols
+
+
+def _formation_cols(h, ei, em, self_name, anchor, hp_em, pp_em, fref):
+    """Rich spatial formation features (notes/14): tvtF_{6}/tvtFw_{6}/tvtF50_{6} (b_full/wls/late) +
+    tvt_dense — each as a CORRECTION to the anchor — plus uncertainty (form_std/form_rng = spread
+    across the 6 formation reconstructions), tracker-vs-spatial cross-signals (pf/hmm − spatial,
+    spatial − dense), and plane_knn_d / dense_dist / dense_std gates. 27 columns. Zeros if fref None."""
     n = int(em.sum())
     if fref is None:
-        return [np.zeros(n, np.float32)] * 22
+        return [np.zeros(n, np.float32)] * _NFORM
     Ti = h[TARGET_INPUT].to_numpy(); Z = h["Z"].to_numpy()
     xy = h[["X", "Y"]].to_numpy()
     eidx = np.where(em)[0]; kidx = np.where(np.isfinite(Ti))[0]
@@ -699,17 +703,26 @@ def _formation_cols(h, ei, em, self_name, anchor, fref):
     FI, DI = fref["FI"], fref["DI"]
     form_e, knn_d = FI.impute(xy_e, self_wid=self_name)
     form_k, _ = FI.impute(xy_k, self_wid=self_name)
-    tvtF = []; tvtFw = []; tvtF50 = []
+    tvtF_abs = []; tvtF = []; tvtFw = []; tvtF50 = []
     for fi in range(6):
         bf, bl, bw = _seg_b_well(ktvt, z_k, form_k[:, fi])
-        tvtF.append((-z_e + form_e[:, fi] + bf - anchor).astype(np.float32))
+        ab = (-z_e + form_e[:, fi] + bf).astype(np.float32); tvtF_abs.append(ab)
+        tvtF.append((ab - anchor).astype(np.float32))
         tvtFw.append((-z_e + form_e[:, fi] + bw - anchor).astype(np.float32))
         tvtF50.append((-z_e + form_e[:, fi] + bl - anchor).astype(np.float32))
     d_e, dstd_e, d_dist = DI.impute(xy_e, self_wid=self_name)
     d_k, _, _ = DI.impute(xy_k, self_wid=self_name)
     bfd, _, _ = _seg_b_well(ktvt, z_k, d_k)
-    tvt_dense = (-z_e + d_e + bfd - anchor).astype(np.float32)
-    return tvtF + tvtFw + tvtF50 + [tvt_dense, np.log1p(knn_d).astype(np.float32),
+    dense_abs = (-z_e + d_e + bfd).astype(np.float32)
+    tvt_dense = (dense_abs - anchor).astype(np.float32)
+    stack6 = np.stack(tvtF_abs)                              # (6, n) — spread = datum uncertainty
+    form_std = stack6.std(0).astype(np.float32)
+    form_rng = (stack6.max(0) - stack6.min(0)).astype(np.float32)
+    pf_vs = (pp_em - tvtF_abs[0]).astype(np.float32)         # tracker vs spatial (ANCC)
+    hmm_vs = (hp_em - tvtF_abs[0]).astype(np.float32)
+    sp_vs_dense = (tvtF_abs[0] - dense_abs).astype(np.float32)
+    return tvtF + tvtFw + tvtF50 + [tvt_dense, form_std, form_rng, pf_vs, hmm_vs, sp_vs_dense,
+                                    np.log1p(knn_d).astype(np.float32),
                                     np.log1p(d_dist).astype(np.float32), dstd_e.astype(np.float32)]
 
 
@@ -788,7 +801,7 @@ def _stack_features(well: Well, level_model, anchor_override=None, spatial_ref=N
     s_cols = [sp_drift, sp_nndist, sp_impd]
     # --- Rich spatial formation-PLANE features (notes/14): the top-team datum lever — reconstruct TVT
     #     from neighbour wells' formation surfaces (6 formations × 3 datum segments + dense ANCC). ---
-    fcols = _formation_cols(h, ei, em, well.name, anchor, formation_ref)
+    fcols = _formation_cols(h, ei, em, well.name, anchor, hp[em], pp[em], formation_ref)
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
                         + pf_cols + a_cols + b_cols + r_cols + s_cols + fcols)
     res = dict(X=X, anchor=anchor, fusion=fusion, ff=baseline_ffill(h), em=em,
