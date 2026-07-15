@@ -665,6 +665,22 @@ def gbm_stack(well, level_model, gbm, blend=0.75):
         pred = gbm_pred
     gbmA = f["anchor"] + pred
     out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]
+    out = _project_and_smooth(well.horizontal, out)  # notes/14: per-well savgol smoothing
+    return out
+
+
+def _project_and_smooth(hw, out, sg_w=17, sg_p=3):
+    """Per-well Savitzky-Golay smoothing of the eval curve (notes/14). The top-team IRLS U=TVT+Z
+    projection blows up on our ~74%-eval wells, so only the safe smoothing is kept."""
+    from scipy.signal import savgol_filter
+    em = hw[TARGET_INPUT].isna().to_numpy()
+    if em.sum() == 0:
+        return out
+    v = out[em]; n = len(v); wl = min(sg_w, n)
+    if wl % 2 == 0:
+        wl -= 1
+    if wl >= sg_p + 2:
+        out[em] = savgol_filter(v, wl, sg_p)
     return out
 
 

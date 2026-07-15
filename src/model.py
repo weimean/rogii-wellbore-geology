@@ -870,6 +870,43 @@ def gbm_stack(well: Well, level_model, gbm, blend: float = 0.75) -> np.ndarray:
         pred = gbm_pred
     gbmA = f["anchor"] + pred
     out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]  # global w=0.75 (adaptive hurt public)
+    out = _project_and_smooth(well.horizontal, out)  # notes/14: robust U=TVT+Z projection + savgol
+    return out
+
+
+def _robfit(s, y, deg=4):
+    """Tukey-IRLS polynomial fit, robust to wrong-branch excursions. Returns (coef, x0, xs) or None."""
+    s = np.asarray(s, float); y = np.asarray(y, float)
+    m = np.isfinite(s) & np.isfinite(y); s, y = s[m], y[m]
+    if len(s) < deg + 2:
+        return None
+    x0 = s[0]; xs = (s.max() - s.min()) if s.max() > s.min() else 1.0
+    xn = (s - x0) / xs; coef = np.polyfit(xn, y, deg)
+    for _ in range(6):
+        res = y - np.polyval(coef, xn)
+        sc = 1.4826 * np.median(np.abs(res - np.median(res))) + 1e-6
+        w = 1.0 / (1.0 + (res / (4.685 * sc)) ** 2)
+        try:
+            coef = np.polyfit(xn, y, deg, w=np.sqrt(w))
+        except Exception:
+            break
+    return coef, x0, xs
+
+
+def _project_and_smooth(hw, out, sg_w=17, sg_p=3):
+    """Post-processing (notes/14): per-well Savitzky-Golay smooth of the eval prediction curve
+    (removes GBM row-noise on a physically smooth curve). The top teams also do a robust IRLS deg-4
+    U=TVT+Z projection, but it BLOWS UP on our ~74%-eval-zone wells (extrapolating the datum trend
+    over 3× the known range is unstable); they gate it per-well via prefix-selection — not ported."""
+    from scipy.signal import savgol_filter
+    em = hw[TARGET_INPUT].isna().to_numpy()
+    if em.sum() == 0:
+        return out
+    v = out[em]; n = len(v); wl = min(sg_w, n)
+    if wl % 2 == 0:
+        wl -= 1
+    if wl >= sg_p + 2:
+        out[em] = savgol_filter(v, wl, sg_p)
     return out
 
 
