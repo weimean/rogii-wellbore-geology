@@ -27,9 +27,15 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 
 ## Validation discipline
 - **Always split by well** (`GroupKFold` on `WELLNAME`). Never leak rows across folds.
-- Report grouped-by-well CV RMSE. **CV and the public LB agree and are both trustworthy** — verified
-  by submitting a twin-matcher leak probe (public 13.604 == phase-2 13.601 → no exploitable leak in the
-  scored test). The 3 `data/raw/test/` wells are leaked EXAMPLES, not the scored set. See notes/CONCLUSION.md.
+- Report grouped-by-well CV RMSE. CV and the public LB agree for GR/model features (verified by a
+  twin-matcher leak probe: public 13.604 == phase-2 13.601). The 3 `data/raw/test/` wells are leaked
+  EXAMPLES, not the scored set. See notes/CONCLUSION.md.
+- ⚠️ **EXCEPTION — spatial/offset-well features: grouped CV UNDERSTATES them massively.** Grouping by well
+  strips each well's pad-neighbours into the same held-out fold, so on train only ~4.6% of wells have a
+  close neighbour in the reference cloud. The scored test wells ARE offset wells to the train set, so
+  spatial features fire on far more of them: the spatial-formation feature read +0.05 on grouped CV but
+  **−1.11 on public** (12.948→11.839). For anything that uses neighbour wells, trust the public LB, not CV.
+  notes/13.
 
 ## Workflow
 - One config YAML per experiment; log every run in `experiments/log.md`.

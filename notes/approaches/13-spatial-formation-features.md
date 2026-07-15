@@ -52,7 +52,13 @@ the spatial prediction falls back to the base model. Worst case on a geographica
 `build_spatial_ref` + `_spatial_cols` in `src/model.py` (+ kernel mirror), threaded through
 `_stack_features / fit_gbm_stack / gbm_stack`. Production `_spatial_cols` verified to match the validated
 `_cache_spatial` output **exactly** (max diff 0.0). Submit smoke-test clean (14,151 rows, NaN=0). Kernel v14.
-Public read: pending. The submission doubles as a probe of test geography — if public ≈ v13 (12.948), the
-scored test wells lack close train neighbours (feature self-disabled, no harm); if public < 12.948, they have them.
+
+## 7. PUBLIC RESULT: 11.839 (−1.11) — the scored test wells ARE offset wells
+v14 public = **11.839** (ref 54717721), from 12.948. The grouped CV (+0.05) understated it **20×**: grouping
+by well removes each well's pad-neighbours, so on train only 4.6% of wells have a close reference neighbour;
+the scored test wells sit near train wells, so the feature fires on far more of them (oracle 0.01 where it
+fires). Legitimate offset-well geosteering, not a target leak. Biggest single jump in the project. Opens the
+path toward top-team ~7-11 — the crude mean-surface drift already gave −1.11; stronger imputation (neighbour
+TVT directly, all 6 surfaces separately, full-eval reconstruction toward the 0.01 oracle) should push much further.
 
 See [[diversity-and-ceiling]], notes/12.
