@@ -789,8 +789,13 @@ def _stack_features(well: Well, level_model, anchor_override=None, spatial_ref=N
     # --- Rich spatial formation-PLANE features (notes/14): the top-team datum lever — reconstruct TVT
     #     from neighbour wells' formation surfaces (6 formations × 3 datum segments + dense ANCC). ---
     fcols = _formation_cols(h, ei, em, well.name, anchor, formation_ref)
+    # --- Likelihood-weighted multi-seed PF ensemble (notes/14): 4 softmax-scale predictions + mean,
+    #     as corrections to the anchor. The top teams' biggest single tracker step (-1.16 in ablation). ---
+    lik = pf_lik_ensemble(well)
+    lik_cols = [(lik[i] - anchor).astype(np.float32) for i in range(lik.shape[0])] if lik is not None \
+        else [np.zeros(em.sum(), np.float32)] * 5
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
-                        + pf_cols + a_cols + b_cols + r_cols + s_cols + fcols)
+                        + pf_cols + a_cols + b_cols + r_cols + s_cols + fcols + lik_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, ff=baseline_ffill(h), em=em,
                mean_dis=float(np.mean(a_absdiff)))  # per-well HMM-PF disagreement (adaptive blend)
     if "TVT" in h.columns:
@@ -886,14 +891,15 @@ def _sysresample(w: np.ndarray, rng) -> np.ndarray:
 
 def pf_posterior(well: Well, n_particles: int = 600, s_target: int = 250, band_pad: float = 90.0,
                  mom: float = 0.98, sig_r: float = 0.003, sig_p: float = 0.45, lam: float = 1.0,
-                 df: float = 4.0, seed: int = 0):
-    """Bootstrap particle filter posterior (pred_rows, std_rows) over ALL rows."""
+                 df: float = 4.0, seed: int = 0, return_ll: bool = False):
+    """Bootstrap particle filter posterior (pred_rows, std_rows) over ALL rows. With return_ll,
+    also returns the PF log-evidence (sum of per-step marginal log-likelihoods) for seed weighting."""
     rng = np.random.default_rng(seed)
     h, t = well.horizontal, well.typewell
     kn = h[h[TARGET_INPUT].notna()]; ev = h[h[TARGET_INPUT].isna()]
     ff = baseline_ffill(h).astype(float); std = np.zeros(len(h))
     if len(ev) == 0 or len(kn) < 50:
-        return ff, std
+        return (ff, std, -1e18) if return_ll else (ff, std)
     tw_tvt = t["TVT"].to_numpy(float)
     tw_gr = gaussian_filter1d(t["GR"].ffill().bfill().to_numpy(float), 3)
     last = float(kn[TARGET_INPUT].iloc[-1])
@@ -914,14 +920,15 @@ def pf_posterior(well: Well, n_particles: int = 600, s_target: int = 250, band_p
     pos = last + rng.normal(0, 3.0, n_particles)
     rate = ir + rng.normal(0, 0.01, n_particles)
     w = np.full(n_particles, 1.0 / n_particles)
-    mean = np.zeros(S); var = np.zeros(S)
+    mean = np.zeros(S); var = np.zeros(S); loglik = 0.0
     for s in range(S):
         rate = mom * rate + rng.normal(0, sig_r, n_particles)
         pos = np.clip(pos + rate * dm[s] + rng.normal(0, sig_p, n_particles), lo, hi)
         zsc = (gr_b[s] - np.interp(pos, tw_tvt, tw_gr)) / gs
         ll = -0.5 * (df + 1.0) * np.log1p(zsc ** 2 / df) * lam
-        w = w * np.exp(ll - ll.max()); sw = w.sum()
-        w = np.full(n_particles, 1.0 / n_particles) if (sw <= 0 or not np.isfinite(sw)) else w / sw
+        m = ll.max(); wnew = w * np.exp(ll - m); sw = wnew.sum()
+        loglik += m + np.log(sw + 1e-300)              # PF marginal log-evidence
+        w = np.full(n_particles, 1.0 / n_particles) if (sw <= 0 or not np.isfinite(sw)) else wnew / sw
         mean[s] = (w * pos).sum(); var[s] = max((w * pos ** 2).sum() - mean[s] ** 2, 0.0)
         if 1.0 / (w ** 2).sum() < n_particles / 2:
             idx = _sysresample(w, rng); pos = pos[idx]; rate = rate[idx]
@@ -932,4 +939,26 @@ def pf_posterior(well: Well, n_particles: int = 600, s_target: int = 250, band_p
     sd = np.sqrt(np.interp(np.arange(n), centers, var))
     out = ff.copy(); out[ei] = np.where(np.isfinite(pred), pred, last)
     std[ei] = np.where(np.isfinite(sd) & (sd > 0), sd, 1e6)
-    return out, std
+    return (out, std, float(loglik)) if return_ll else (out, std)
+
+
+def pf_lik_ensemble(well: Well, scales=(3.0, 5.0, 8.0, 12.0), n_particles: int = 350, n_seeds: int = 8):
+    """Likelihood-weighted multi-seed PF ensemble (notes/14): run the PF with n_seeds different seeds,
+    weight each seed's eval-row prediction by softmax(loglik/scale) for each temperature scale. Returns
+    an (len(scales)+1, n_eval) array — 4 scale-weighted predictions + the plain seed mean."""
+    em = well.eval_mask.to_numpy()
+    ne = int(em.sum())
+    if ne == 0:
+        return None
+    preds = []; lls = []
+    for sd in range(n_seeds):
+        out, _, ll = pf_posterior(well, n_particles=n_particles, seed=sd, return_ll=True)
+        preds.append(out[em]); lls.append(ll)
+    preds = np.stack(preds, 0); lls = np.asarray(lls, float)
+    lls = lls - lls.max()
+    rows = []
+    for sc in scales:
+        wts = np.exp(lls / sc); wts /= wts.sum()
+        rows.append((wts[:, None] * preds).sum(0))
+    rows.append(preds.mean(0))
+    return np.stack(rows, 0).astype(np.float32)

@@ -278,13 +278,13 @@ def _sysresample(w, rng):
 
 
 def pf_posterior(well, n_particles=600, s_target=250, band_pad=90.0,
-                 mom=0.98, sig_r=0.003, sig_p=0.45, lam=1.0, df=4.0, seed=0):
+                 mom=0.98, sig_r=0.003, sig_p=0.45, lam=1.0, df=4.0, seed=0, return_ll=False):
     rng = np.random.default_rng(seed)
     h, t = well.horizontal, well.typewell
     kn = h[h[TARGET_INPUT].notna()]; ev = h[h[TARGET_INPUT].isna()]
     ff = baseline_ffill(h).astype(float); std = np.zeros(len(h))
     if len(ev) == 0 or len(kn) < 50:
-        return ff, std
+        return (ff, std, -1e18) if return_ll else (ff, std)
     tw_tvt = t["TVT"].to_numpy(float)
     tw_gr = gaussian_filter1d(t["GR"].ffill().bfill().to_numpy(float), 3)
     last = float(kn[TARGET_INPUT].iloc[-1])
@@ -301,14 +301,15 @@ def pf_posterior(well, n_particles=600, s_target=250, band_pad=90.0,
     md_b = np.array([md_e[a:b].mean() for a, b in zip(edges[:-1], edges[1:])])
     dm = np.diff(md_b, prepend=float(kn["MD"].iloc[-1]))
     pos = last + rng.normal(0, 3.0, n_particles); rate = ir + rng.normal(0, 0.01, n_particles)
-    w = np.full(n_particles, 1.0 / n_particles); mean = np.zeros(S); var = np.zeros(S)
+    w = np.full(n_particles, 1.0 / n_particles); mean = np.zeros(S); var = np.zeros(S); loglik = 0.0
     for s in range(S):
         rate = mom * rate + rng.normal(0, sig_r, n_particles)
         pos = np.clip(pos + rate * dm[s] + rng.normal(0, sig_p, n_particles), lo, hi)
         zsc = (gr_b[s] - np.interp(pos, tw_tvt, tw_gr)) / gs
         ll = -0.5 * (df + 1.0) * np.log1p(zsc ** 2 / df) * lam
-        w = w * np.exp(ll - ll.max()); sw = w.sum()
-        w = np.full(n_particles, 1.0 / n_particles) if (sw <= 0 or not np.isfinite(sw)) else w / sw
+        m = ll.max(); wnew = w * np.exp(ll - m); sw = wnew.sum()
+        loglik += m + np.log(sw + 1e-300)
+        w = np.full(n_particles, 1.0 / n_particles) if (sw <= 0 or not np.isfinite(sw)) else wnew / sw
         mean[s] = (w * pos).sum(); var[s] = max((w * pos ** 2).sum() - mean[s] ** 2, 0.0)
         if 1.0 / (w ** 2).sum() < n_particles / 2:
             idx = _sysresample(w, rng); pos = pos[idx]; rate = rate[idx]
@@ -317,7 +318,23 @@ def pf_posterior(well, n_particles=600, s_target=250, band_pad=90.0,
     pred = np.interp(np.arange(n), centers, mean); sd = np.sqrt(np.interp(np.arange(n), centers, var))
     out = ff.copy(); out[ei] = np.where(np.isfinite(pred), pred, last)
     std[ei] = np.where(np.isfinite(sd) & (sd > 0), sd, 1e6)
-    return out, std
+    return (out, std, float(loglik)) if return_ll else (out, std)
+
+
+def pf_lik_ensemble(well, scales=(3.0, 5.0, 8.0, 12.0), n_particles=350, n_seeds=8):
+    em = well.eval_mask.to_numpy(); ne = int(em.sum())
+    if ne == 0:
+        return None
+    preds = []; lls = []
+    for sd in range(n_seeds):
+        out, _, ll = pf_posterior(well, n_particles=n_particles, seed=sd, return_ll=True)
+        preds.append(out[em]); lls.append(ll)
+    preds = np.stack(preds, 0); lls = np.asarray(lls, float); lls = lls - lls.max()
+    rows = []
+    for sc in scales:
+        wts = np.exp(lls / sc); wts /= wts.sum(); rows.append((wts[:, None] * preds).sum(0))
+    rows.append(preds.mean(0))
+    return np.stack(rows, 0).astype(np.float32)
 
 
 def _geology_features(well, hp_em, last):
@@ -608,8 +625,10 @@ def _stack_features(well, level_model, spatial_ref=None, formation_ref=None):
     sp_drift, sp_nndist, sp_impd = _spatial_cols(h, ei, em, well.name, spatial_ref)  # notes/13
     s_cols = [sp_drift, sp_nndist, sp_impd]
     fcols = _formation_cols(h, ei, em, well.name, anchor, formation_ref)  # rich formation plane (notes/14)
+    lik = pf_lik_ensemble(well)  # likelihood-weighted multi-seed PF ensemble (notes/14)
+    lik_cols = [(lik[i] - anchor).astype(np.float32) for i in range(lik.shape[0])] if lik is not None else [np.zeros(em.sum(), np.float32)] * 5
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
-                        + pf_cols + a_cols + b_cols + r_cols + s_cols + fcols)
+                        + pf_cols + a_cols + b_cols + r_cols + s_cols + fcols + lik_cols)
     res = dict(X=X, anchor=anchor, fusion=fusion, em=em, mean_dis=float(np.mean(a_absdiff)))
     if "TVT" in h.columns:
         res["truth"] = ev["TVT"].values
