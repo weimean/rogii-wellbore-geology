@@ -51,3 +51,21 @@ Error splits by nearest same-field neighbour distance: <150 ft → already at li
 3. **Anisotropic variogram kriging of b_w** — stronger honest spatial datum (CV 9.32→9.21).
 4. **Visible-prefix per-well self-calibration** — label-free candidate selection.
 5. Keep trusting a field-grouped hold-out + public LB; the ~7.3 leak notebooks are fragile (shake to ~10).
+
+## Reproduction attempts (2026-07-16) — the top honest levers DON'T reproduce naively
+Tested the three "honest" levers surfaced above. All three FAIL on our data:
+1. **GR datum scan (affine heel-cal + bimodal), flat-U shape:** pooled 87 (vs ffill 15.9). The GR cost
+   landscape's minimum is NOT at the true datum — exactly steven's forum finding. Needs a good tracker
+   SHAPE first (Georgy's 80% is "centred on the true shape"), not flat-U.
+2. **Affine-GR offset refinement on the PF shape:** 17.8 → 20.4 (WORSE). Scanning a GR offset on the PF
+   position moves it AWAY from truth — the GR signal is misleading at the ±25 ft scale.
+3. **Anisotropic kriging of the per-well level L_w:** LOWO L_w-error 13.4–14.6 vs null 12.77 (WORSE than
+   predicting zero). Raw per-well level is not spatially predictable at K=25 (regresses to field mean);
+   survey-density-limited, per wharekawa/Georgy. The notebook's 9.32→9.21 kriges the MODEL RESIDUAL
+   (tiny post-hoc shrink), which our formation-plane's close-neighbour gating already captures.
+
+**Conclusion:** the top teams' ~5-6 ft honest edge is a proprietary GR-matching formulation (Tucker 7th,
+shu01 1st won't disclose; APIyuya's CNN/attention blew up on the bimodal ambiguity). The OBVIOUS
+reproductions all fail. Our 11.042 (formation-plane + trackers + MLP, all honest) is a solid, ROBUST result
+— the ~7 leak notebooks are predicted to shake to ~10 on private (k256, 12th). Remaining honest headroom
+needs either the undisclosed GR method or the meta-stack-of-stacks architecture (needs OOF infra rebuild).
