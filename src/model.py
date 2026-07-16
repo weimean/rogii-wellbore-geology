@@ -857,7 +857,7 @@ def _adaptive_w(mean_dis, gbm, w0=0.70, slope=0.05, lo=0.55, hi=1.0):
     return float(np.clip(w0 + slope * z, lo, hi))
 
 
-def gbm_stack(well: Well, level_model, gbm, blend: float = 0.75) -> np.ndarray:
+def gbm_stack(well: Well, level_model, gbm, blend: float = 0.90) -> np.ndarray:
     """Blend the seed-ensembled (LightGBM+CatBoost)-corrected anchor with the variance fusion,
     using a per-well ADAPTIVE blend (less fusion where HMM/PF disagree). Our best model."""
     f = _stack_features(well, level_model, spatial_ref=gbm.get("spatial_ref"),
