@@ -61,9 +61,10 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | **+ neural-net (MLP) diversity** | **13.004** | **12.948** | 0.7·(LGB+Cat) + 0.3·MLP(256,128,64); different algo again; CONFIRMED on public; notes/12 |
 | **+ spatial formation features (BEST, BREAKTHROUGH)** | **~12.95** | **11.839** | impute neighbour wells' structural surfaces; CV UNDERSTATED (grouped CV removes neighbours); public −1.11; kernel v14; notes/13 |
 | ~~+ neighbour-TVT-direct (twin abs datum)~~ (REVERTED) | — | 11.988 | v14 already saturates the twin signal; abs-level feature added noise; kernel v15 reverted; notes/13 |
-| **+ rich formation-plane features (BEST)** | tbd | **11.101** | top-team lever: FormationPlaneKNN (6 formations, WLS plane over k=10 neighbours) + dense ANCC + b-segments; public −0.74; kernel v16; notes/14 |
+| **+ rich formation-plane features (BEST)** | — | **11.101** | top-team lever: FormationPlaneKNN (6 formations, WLS plane over k=10 neighbours) + dense ANCC + b-segments; public −0.74; kernel v16; notes/14 |
+| ~~+ strengthen formation (uncertainty+cross-signals+savgol)~~ (REVERTED) | — | 11.503 | +5 feats + savgol regressed; formation-plane lever saturated; kernel v17 reverted; notes/14 |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`, kernel v16, ref 54731971): seed-ensembled LGB+Cat
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`, kernel v16, ref 54731971 (BEST)): seed-ensembled LGB+Cat
   (3 seeds, step=5) ⊕ PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP** ⊕ **crude spatial** ⊕
   **rich formation-PLANE features** (FormationPlaneKNN + dense ANCC), final blend 0.75. **Public 11.101** — from a starting ffill of 15.9, and 13.288 before this
   session's rich-features/MLP/spatial run (−1.45 this session). See notes/approaches/12–13.
