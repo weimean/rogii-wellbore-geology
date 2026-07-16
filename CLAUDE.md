@@ -63,10 +63,11 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | ~~+ neighbour-TVT-direct (twin abs datum)~~ (REVERTED) | — | 11.988 | v14 already saturates the twin signal; abs-level feature added noise; kernel v15 reverted; notes/13 |
 | **+ rich formation-plane features (BEST)** | — | **11.101** | top-team lever: FormationPlaneKNN (6 formations, WLS plane over k=10 neighbours) + dense ANCC + b-segments; public −0.74; kernel v16; notes/14 |
 | ~~+ strengthen formation (uncertainty+cross-signals+savgol)~~ (REVERTED) | — | 11.503 | +5 feats + savgol regressed; formation-plane lever saturated; kernel v17 reverted; notes/14 |
+| **+ likelihood-weighted PF ensemble (BEST)** | — | **11.042** | 8-seed PF, softmax(loglik/scale) over {3,5,8,12}; marginal −0.06 (we already have a PF); kernel v18; notes/14 |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`, kernel v16, ref 54731971 (BEST)): seed-ensembled LGB+Cat
+- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`, kernel v18, ref 54757027 (BEST)): seed-ensembled LGB+Cat
   (3 seeds, step=5) ⊕ PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP** ⊕ **crude spatial** ⊕
-  **rich formation-PLANE features** (FormationPlaneKNN + dense ANCC), final blend 0.75. **Public 11.101** — from a starting ffill of 15.9, and 13.288 before this
+  **rich formation-PLANE features** (FormationPlaneKNN + dense ANCC), final blend 0.75. **Public 11.042** — from a starting ffill of 15.9, and 13.288 before this
   session's rich-features/MLP/spatial run (−1.45 this session). See notes/approaches/12–13.
 - ⚠️ **The "13.52 ceiling" was FEATURE-POVERTY, not input-limited.** I declared an input-limited ceiling
   multiple times based on testing features IN ISOLATION (each new feature ≈ +0.01). WRONG. Reproducing the

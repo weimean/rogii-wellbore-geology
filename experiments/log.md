@@ -75,3 +75,9 @@ Metric: **RMSE** (lower is better; Kaggle scores √MSE). Always report **groupe
 - v17 public = **11.503**, WORSE than v16's 11.101 (+0.40). Reverted to v16.
 - Bundled two changes (couldn't isolate): (a) +5 formation features (form_std/form_rng uncertainty spread across the 6 reconstructions, pf/hmm/dense cross-signals), (b) per-well Savitzky-Golay post-processing. Net regressed. Likely the savgol smoothing removed real eval-curve structure and/or the cross-signals added noise the GBM over-weighted.
 - **BEST remains v16 = public 11.101** (rich formation-plane, 22 features, no savgol). The formation-plane lever is captured; further feature-piling on it regresses. Session final: 13.288 → 11.101 (−2.19).
+
+## Likelihood-weighted PF ensemble — PUBLIC 11.042 (BEST) (2026-07-16)
+- **v18 public = 11.042** (ref 54757027), from v16's 11.101 = −0.06. New best. MARGINAL, as expected: we already feed a bootstrap PF into the stack, so the multi-seed likelihood-weighted variant adds little.
+- pf_posterior now returns PF log-evidence (return_ll); pf_lik_ensemble runs 8 seeds (350 particles), weights each seed's eval prediction by softmax(loglik/scale) for scales {3,5,8,12} → 4 scale-weighted preds + mean = 5 features (corrections to the anchor). ~0.9s/well; local fit ~1.5h, Kaggle ~2h (within the 9h cap).
+- **Session arc: 13.288 → 12.948 (MLP) → 11.839 (crude spatial) → 11.101 (formation-plane) → 11.042 (lik-PF). −2.25 public.** The cheap honest levers are now largely exhausted; the top-team honest CV ~9.2 would need their full richer tracker set (beam + NCC + more) + dual-stack blend, with diminishing returns.
+- Accelerator (user request): kernel v19+ has enable_gpu + GPU LGB/Cat (CPU fallback) + joblib-threaded per-well feature loops. Not yet pushed/submitted; the real bottleneck is the numpy per-well loop.
