@@ -82,3 +82,18 @@ bimodal hedge. Full-773 pooled results:
 **Verdict:** GR matching is a small lever (−1) already subsumed by our multi-offset GR-match family. The
 forum's ~5 is NOT a cleverer typewell-GR formulation (physics caps ~12); it's spatial/offset-well (we have
 it) or prefix-CV leakage. Probes: tools/gr_window_probe.py, gr_level_probe.py, gr_seq_probe.py.
+
+## Option 3 (meta-stack) — MARGINAL (2026-07-16)
+Positive-Ridge meta over [p_gbm, p_mlp, fusion] fit out-of-fold, + MD-ramp fade. Pooled 773-well CV:
+- current fixed blend: 10.9034
+- positive-Ridge meta: **10.8728 (−0.031)**, weights [0.826 gbm, 0.112 mlp, 0.062 fusion]
+- + MD-ramp fade τ=60: 10.8721 (fade adds ~nothing)
+Real but tiny (near public noise floor). The signal: the meta wants MUCH less fusion (0.06 vs our 0.25) and
+less MLP — echoes the known "fusion over-weighted because the GBM ingests HMM/PF as features." A fusion-
+weight reduction (0.25→~0.10) may capture most of it more simply. tools/meta_stack_test.py.
+
+## BOTH TRACKS EXHAUSTED — 11.042 stands
+Option 2 (GR) rigorous negative; option 3 (meta) marginal −0.03. No meaningful reproducible honest lever
+remains beyond 11.042. The exploration's lasting value: (1) our 11.042 is HONEST + ROBUST (leak notebooks
+predicted to shake to ~10 private); (2) the top ~5-6 is proprietary GR + within-field spatial we can't fully
+crack; (3) our blend slightly over-weights fusion. Recommendation: bank 11.042 (kernel v18).
