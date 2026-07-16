@@ -685,17 +685,13 @@ def build_formation_ref(wells):
         return None
 
 
-_NFORM = 27  # feature count emitted by _formation_cols
-
-
-def _formation_cols(h, ei, em, self_name, anchor, hp_em, pp_em, fref):
-    """Rich spatial formation features (notes/14): tvtF_{6}/tvtFw_{6}/tvtF50_{6} (b_full/wls/late) +
-    tvt_dense — each as a CORRECTION to the anchor — plus uncertainty (form_std/form_rng = spread
-    across the 6 formation reconstructions), tracker-vs-spatial cross-signals (pf/hmm − spatial,
-    spatial − dense), and plane_knn_d / dense_dist / dense_std gates. 27 columns. Zeros if fref None."""
+def _formation_cols(h, ei, em, self_name, anchor, fref):
+    """Rich spatial formation features (notes/14): tvtF_{6} (b_full), tvtFw_{6} (b_wls), tvtF50_{6}
+    (b_late), tvt_dense — each as a CORRECTION to the anchor (≈ y where a close neighbour exists) —
+    plus plane_knn_d / dense_dist / dense_std gates. 22 columns. Returns zeros if fref is None."""
     n = int(em.sum())
     if fref is None:
-        return [np.zeros(n, np.float32)] * _NFORM
+        return [np.zeros(n, np.float32)] * 22
     Ti = h[TARGET_INPUT].to_numpy(); Z = h["Z"].to_numpy()
     xy = h[["X", "Y"]].to_numpy()
     eidx = np.where(em)[0]; kidx = np.where(np.isfinite(Ti))[0]
@@ -703,26 +699,17 @@ def _formation_cols(h, ei, em, self_name, anchor, hp_em, pp_em, fref):
     FI, DI = fref["FI"], fref["DI"]
     form_e, knn_d = FI.impute(xy_e, self_wid=self_name)
     form_k, _ = FI.impute(xy_k, self_wid=self_name)
-    tvtF_abs = []; tvtF = []; tvtFw = []; tvtF50 = []
+    tvtF = []; tvtFw = []; tvtF50 = []
     for fi in range(6):
         bf, bl, bw = _seg_b_well(ktvt, z_k, form_k[:, fi])
-        ab = (-z_e + form_e[:, fi] + bf).astype(np.float32); tvtF_abs.append(ab)
-        tvtF.append((ab - anchor).astype(np.float32))
+        tvtF.append((-z_e + form_e[:, fi] + bf - anchor).astype(np.float32))
         tvtFw.append((-z_e + form_e[:, fi] + bw - anchor).astype(np.float32))
         tvtF50.append((-z_e + form_e[:, fi] + bl - anchor).astype(np.float32))
     d_e, dstd_e, d_dist = DI.impute(xy_e, self_wid=self_name)
     d_k, _, _ = DI.impute(xy_k, self_wid=self_name)
     bfd, _, _ = _seg_b_well(ktvt, z_k, d_k)
-    dense_abs = (-z_e + d_e + bfd).astype(np.float32)
-    tvt_dense = (dense_abs - anchor).astype(np.float32)
-    stack6 = np.stack(tvtF_abs)                              # (6, n) — spread = datum uncertainty
-    form_std = stack6.std(0).astype(np.float32)
-    form_rng = (stack6.max(0) - stack6.min(0)).astype(np.float32)
-    pf_vs = (pp_em - tvtF_abs[0]).astype(np.float32)         # tracker vs spatial (ANCC)
-    hmm_vs = (hp_em - tvtF_abs[0]).astype(np.float32)
-    sp_vs_dense = (tvtF_abs[0] - dense_abs).astype(np.float32)
-    return tvtF + tvtFw + tvtF50 + [tvt_dense, form_std, form_rng, pf_vs, hmm_vs, sp_vs_dense,
-                                    np.log1p(knn_d).astype(np.float32),
+    tvt_dense = (-z_e + d_e + bfd - anchor).astype(np.float32)
+    return tvtF + tvtFw + tvtF50 + [tvt_dense, np.log1p(knn_d).astype(np.float32),
                                     np.log1p(d_dist).astype(np.float32), dstd_e.astype(np.float32)]
 
 
@@ -801,7 +788,7 @@ def _stack_features(well: Well, level_model, anchor_override=None, spatial_ref=N
     s_cols = [sp_drift, sp_nndist, sp_impd]
     # --- Rich spatial formation-PLANE features (notes/14): the top-team datum lever — reconstruct TVT
     #     from neighbour wells' formation surfaces (6 formations × 3 datum segments + dense ANCC). ---
-    fcols = _formation_cols(h, ei, em, well.name, anchor, hp[em], pp[em], formation_ref)
+    fcols = _formation_cols(h, ei, em, well.name, anchor, formation_ref)
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
                         + pf_cols + a_cols + b_cols + r_cols + s_cols + fcols)
     res = dict(X=X, anchor=anchor, fusion=fusion, ff=baseline_ffill(h), em=em,
@@ -883,43 +870,6 @@ def gbm_stack(well: Well, level_model, gbm, blend: float = 0.75) -> np.ndarray:
         pred = gbm_pred
     gbmA = f["anchor"] + pred
     out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]  # global w=0.75 (adaptive hurt public)
-    out = _project_and_smooth(well.horizontal, out)  # notes/14: robust U=TVT+Z projection + savgol
-    return out
-
-
-def _robfit(s, y, deg=4):
-    """Tukey-IRLS polynomial fit, robust to wrong-branch excursions. Returns (coef, x0, xs) or None."""
-    s = np.asarray(s, float); y = np.asarray(y, float)
-    m = np.isfinite(s) & np.isfinite(y); s, y = s[m], y[m]
-    if len(s) < deg + 2:
-        return None
-    x0 = s[0]; xs = (s.max() - s.min()) if s.max() > s.min() else 1.0
-    xn = (s - x0) / xs; coef = np.polyfit(xn, y, deg)
-    for _ in range(6):
-        res = y - np.polyval(coef, xn)
-        sc = 1.4826 * np.median(np.abs(res - np.median(res))) + 1e-6
-        w = 1.0 / (1.0 + (res / (4.685 * sc)) ** 2)
-        try:
-            coef = np.polyfit(xn, y, deg, w=np.sqrt(w))
-        except Exception:
-            break
-    return coef, x0, xs
-
-
-def _project_and_smooth(hw, out, sg_w=17, sg_p=3):
-    """Post-processing (notes/14): per-well Savitzky-Golay smooth of the eval prediction curve
-    (removes GBM row-noise on a physically smooth curve). The top teams also do a robust IRLS deg-4
-    U=TVT+Z projection, but it BLOWS UP on our ~74%-eval-zone wells (extrapolating the datum trend
-    over 3× the known range is unstable); they gate it per-well via prefix-selection — not ported."""
-    from scipy.signal import savgol_filter
-    em = hw[TARGET_INPUT].isna().to_numpy()
-    if em.sum() == 0:
-        return out
-    v = out[em]; n = len(v); wl = min(sg_w, n)
-    if wl % 2 == 0:
-        wl -= 1
-    if wl >= sg_p + 2:
-        out[em] = savgol_filter(v, wl, sg_p)
     return out
 
 

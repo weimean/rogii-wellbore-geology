@@ -70,3 +70,8 @@ Metric: **RMSE** (lower is better; Kaggle scores √MSE). Always report **groupe
 - FormationPlaneKNN (6 formations, per-well median surfaces → IDW WLS plane over k=10 nearest OTHER wells, self-excluded) + DenseANCCImputer (k=20) + seg_b_well (datum b, segment variants). 22 features (tvtF_{6}/tvtFw_{6}/tvtF50_{6} + tvt_dense + 3 gates), each fed as a correction to the anchor. Ported faithfully from the LB-7 notebooks.
 - **Local diagnostics were MIXED** (tvtF often ~ffill; plane dilutes a close twin with 9 farther different-datum wells), and grouped CV would have understated it — but the GBM extracted the signal on the real test (offset-well neighbours), gated on knn_d. THIRD confirmation this session that grouped CV understates spatial features → trust the public LB.
 - Session arc: 13.288 → 12.948 (MLP) → 11.839 (crude spatial) → **11.101** (formation-plane). Approaching top-team honest CV ~9.2. Remaining honest levers: richer trackers (128-seed likelihood-weighted PF, beam, multi-scale NCC), robust IRLS deg-4 projection of U=TVT+Z, dual-stack blend. notes/14.
+
+## Strengthened formation-plane v17 — REVERTED (2026-07-15)
+- v17 public = **11.503**, WORSE than v16's 11.101 (+0.40). Reverted to v16.
+- Bundled two changes (couldn't isolate): (a) +5 formation features (form_std/form_rng uncertainty spread across the 6 reconstructions, pf/hmm/dense cross-signals), (b) per-well Savitzky-Golay post-processing. Net regressed. Likely the savgol smoothing removed real eval-curve structure and/or the cross-signals added noise the GBM over-weighted.
+- **BEST remains v16 = public 11.101** (rich formation-plane, 22 features, no savgol). The formation-plane lever is captured; further feature-piling on it regresses. Session final: 13.288 → 11.101 (−2.19).

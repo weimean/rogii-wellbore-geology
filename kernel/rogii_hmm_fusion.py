@@ -526,35 +526,25 @@ def build_formation_ref(wells):
         return None
 
 
-_NFORM = 27
-
-
-def _formation_cols(h, ei, em, self_name, anchor, hp_em, pp_em, fref):
+def _formation_cols(h, ei, em, self_name, anchor, fref):
     n = int(em.sum())
     if fref is None:
-        return [np.zeros(n, np.float32)] * _NFORM
+        return [np.zeros(n, np.float32)] * 22
     Ti = h[TARGET_INPUT].to_numpy(); Z = h["Z"].to_numpy(); xy = h[["X", "Y"]].to_numpy()
     eidx = np.where(em)[0]; kidx = np.where(np.isfinite(Ti))[0]
     xy_e = xy[eidx]; xy_k = xy[kidx]; z_e = Z[eidx]; ktvt = Ti[kidx]; z_k = Z[kidx]
     FI, DI = fref["FI"], fref["DI"]
     form_e, knn_d = FI.impute(xy_e, self_wid=self_name); form_k, _ = FI.impute(xy_k, self_wid=self_name)
-    tvtF_abs = []; tvtF = []; tvtFw = []; tvtF50 = []
+    tvtF = []; tvtFw = []; tvtF50 = []
     for fi in range(6):
         bf, bl, bw = _seg_b_well(ktvt, z_k, form_k[:, fi])
-        ab = (-z_e + form_e[:, fi] + bf).astype(np.float32); tvtF_abs.append(ab)
-        tvtF.append((ab - anchor).astype(np.float32))
+        tvtF.append((-z_e + form_e[:, fi] + bf - anchor).astype(np.float32))
         tvtFw.append((-z_e + form_e[:, fi] + bw - anchor).astype(np.float32))
         tvtF50.append((-z_e + form_e[:, fi] + bl - anchor).astype(np.float32))
     d_e, dstd_e, d_dist = DI.impute(xy_e, self_wid=self_name); d_k, _, _ = DI.impute(xy_k, self_wid=self_name)
     bfd, _, _ = _seg_b_well(ktvt, z_k, d_k)
-    dense_abs = (-z_e + d_e + bfd).astype(np.float32)
-    tvt_dense = (dense_abs - anchor).astype(np.float32)
-    stack6 = np.stack(tvtF_abs)
-    form_std = stack6.std(0).astype(np.float32); form_rng = (stack6.max(0) - stack6.min(0)).astype(np.float32)
-    pf_vs = (pp_em - tvtF_abs[0]).astype(np.float32); hmm_vs = (hp_em - tvtF_abs[0]).astype(np.float32)
-    sp_vs_dense = (tvtF_abs[0] - dense_abs).astype(np.float32)
-    return tvtF + tvtFw + tvtF50 + [tvt_dense, form_std, form_rng, pf_vs, hmm_vs, sp_vs_dense,
-                                    np.log1p(knn_d).astype(np.float32),
+    tvt_dense = (-z_e + d_e + bfd - anchor).astype(np.float32)
+    return tvtF + tvtFw + tvtF50 + [tvt_dense, np.log1p(knn_d).astype(np.float32),
                                     np.log1p(d_dist).astype(np.float32), dstd_e.astype(np.float32)]
 
 
@@ -617,7 +607,7 @@ def _stack_features(well, level_model, spatial_ref=None, formation_ref=None):
     r_cols = _rich_cols(h, well.typewell, ei, hp[em], pp[em], float(kt[-1]))  # reproduced 7.016 feats (notes/12)
     sp_drift, sp_nndist, sp_impd = _spatial_cols(h, ei, em, well.name, spatial_ref)  # notes/13
     s_cols = [sp_drift, sp_nndist, sp_impd]
-    fcols = _formation_cols(h, ei, em, well.name, anchor, hp[em], pp[em], formation_ref)  # rich formation plane (notes/14)
+    fcols = _formation_cols(h, ei, em, well.name, anchor, formation_ref)  # rich formation plane (notes/14)
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
                         + pf_cols + a_cols + b_cols + r_cols + s_cols + fcols)
     res = dict(X=X, anchor=anchor, fusion=fusion, em=em, mean_dis=float(np.mean(a_absdiff)))
@@ -675,22 +665,6 @@ def gbm_stack(well, level_model, gbm, blend=0.75):
         pred = gbm_pred
     gbmA = f["anchor"] + pred
     out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]
-    out = _project_and_smooth(well.horizontal, out)  # notes/14: per-well savgol smoothing
-    return out
-
-
-def _project_and_smooth(hw, out, sg_w=17, sg_p=3):
-    """Per-well Savitzky-Golay smoothing of the eval curve (notes/14). The top-team IRLS U=TVT+Z
-    projection blows up on our ~74%-eval wells, so only the safe smoothing is kept."""
-    from scipy.signal import savgol_filter
-    em = hw[TARGET_INPUT].isna().to_numpy()
-    if em.sum() == 0:
-        return out
-    v = out[em]; n = len(v); wl = min(sg_w, n)
-    if wl % 2 == 0:
-        wl -= 1
-    if wl >= sg_p + 2:
-        out[em] = savgol_filter(v, wl, sg_p)
     return out
 
 
