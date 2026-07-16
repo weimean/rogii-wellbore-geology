@@ -69,3 +69,16 @@ shu01 1st won't disclose; APIyuya's CNN/attention blew up on the bimodal ambigui
 reproductions all fail. Our 11.042 (formation-plane + trackers + MLP, all honest) is a solid, ROBUST result
 — the ~7 leak notebooks are predicted to shake to ~10 on private (k256, 12th). Remaining honest headroom
 needs either the undisclosed GR method or the meta-stack-of-stacks architecture (needs OOF infra rebuild).
+
+## Option 2 (GR method) — dedicated agent, rigorous NEGATIVE (2026-07-16)
+Attacked the ~5ft GR lever with windowed NCC, DTW, sequence scans, HMM inversion, affine heel-cal,
+bimodal hedge. Full-773 pooled results:
+- best GR-match (affine level-pin + bimodal softmax): **14.83 (−1.08 over ffill 15.91)**.
+- GR-inversion ORACLE (pick match nearest truth = cheat): **12.2** → NO point/sequence matcher beats ~12.
+- horizontal GR vs typewell GR at TRUE TVT: corr **0.65** (35% unexplained) → too self-similar to invert.
+- wiggle inversion (local-linearisation dTVT): HURTS (14.6→17.0), it's noise. HMM GR-emission: 26.1.
+- Error is LEVEL-dominated (level 12.77, wiggle std 7.5); GR pins the level only weakly (→11.54).
+- U=TVT+Z flat-datum scan: 104 (wrong physics — in the toe TVT~flat while Z wanders 100-200ft).
+**Verdict:** GR matching is a small lever (−1) already subsumed by our multi-offset GR-match family. The
+forum's ~5 is NOT a cleverer typewell-GR formulation (physics caps ~12); it's spatial/offset-well (we have
+it) or prefix-CV leakage. Probes: tools/gr_window_probe.py, gr_level_probe.py, gr_seq_probe.py.
