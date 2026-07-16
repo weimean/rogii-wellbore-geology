@@ -642,22 +642,38 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     from catboost import CatBoostRegressor
     from sklearn.preprocessing import StandardScaler
     from sklearn.neural_network import MLPRegressor
+    from joblib import Parallel, delayed
     spatial_ref = build_spatial_ref(train_wells)  # notes/13: impute each well from its neighbours
     formation_ref = build_formation_ref(train_wells)  # notes/14: FormationPlaneKNN + dense ANCC
-    X, y, dis = [], [], []
-    for w in train_wells:
+
+    def _feat(w):  # per-well feature build (the runtime bottleneck) — threaded over wells
         f = _stack_features(w, level_model, spatial_ref=spatial_ref, formation_ref=formation_ref)
         if f is None or "truth" not in f:
-            continue
-        X.append(f["X"][::step]); y.append((f["truth"] - f["anchor"])[::step]); dis.append(f["mean_dis"])
-    X = np.vstack(X); y = np.concatenate(y)
+            return None
+        return f["X"][::step], (f["truth"] - f["anchor"])[::step], f["mean_dis"]
+    parts = [r for r in Parallel(n_jobs=-1, prefer="threads")(delayed(_feat)(w) for w in train_wells) if r is not None]
+    X = np.vstack([p[0] for p in parts]); y = np.concatenate([p[1] for p in parts]); dis = [p[2] for p in parts]
+
+    def _fit_lgb(sd):  # GPU LightGBM with CPU fallback (Kaggle build may lack GPU)
+        try:
+            return lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
+                   min_child_samples=200, reg_lambda=1.0, subsample=0.8, subsample_freq=1,
+                   colsample_bytree=0.8, random_state=sd, device="gpu", verbose=-1).fit(X, y)
+        except Exception:
+            return lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
+                   min_child_samples=200, reg_lambda=1.0, subsample=0.8, subsample_freq=1,
+                   colsample_bytree=0.8, random_state=sd, n_jobs=-1, verbose=-1).fit(X, y)
+
+    def _fit_cat(sd):  # GPU CatBoost (no rsm on GPU) with CPU fallback
+        try:
+            return CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
+                   random_seed=sd, task_type="GPU", devices="0", verbose=0).fit(X, y)
+        except Exception:
+            return CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
+                   rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X, y)
     models = []
     for sd in seeds:
-        models.append(lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
-                      min_child_samples=200, reg_lambda=1.0, subsample=0.8, subsample_freq=1,
-                      colsample_bytree=0.8, random_state=sd, n_jobs=-1, verbose=-1).fit(X, y))
-        models.append(CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
-                      rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X, y))
+        models.append(_fit_lgb(sd)); models.append(_fit_cat(sd))
     # neural net for diversity (blended 0.7/0.3: -0.20 pooled, notes/13)
     Xn = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
     scaler = StandardScaler().fit(Xn)
@@ -696,13 +712,13 @@ print("fitting GBM stack on train (computes HMM per train well)...")
 gbm = fit_gbm_stack(train_wells, level_model)
 
 print("predicting test wells...")
-rows = []
-for w in load_split(TEST_DIR):
-    preds = gbm_stack(w, level_model, gbm)
-    em = w.eval_mask.to_numpy()
-    for i, (p, is_ev) in enumerate(zip(preds, em)):
-        if is_ev:
-            rows.append({"id": submission_id(w.name, i), "tvt": float(p)})
+from joblib import Parallel, delayed
+
+
+def _predict(w):
+    preds = gbm_stack(w, level_model, gbm); em = w.eval_mask.to_numpy()
+    return [{"id": submission_id(w.name, i), "tvt": float(p)} for i, (p, ev) in enumerate(zip(preds, em)) if ev]
+rows = [r for part in Parallel(n_jobs=-1, prefer="threads")(delayed(_predict)(w) for w in load_split(TEST_DIR)) for r in part]
 sub = pd.DataFrame(rows)
 sub.to_csv("submission.csv", index=False)
 print(f"wrote submission.csv: {len(sub)} rows, NaN={sub['tvt'].isna().sum()}")
