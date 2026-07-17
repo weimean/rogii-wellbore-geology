@@ -28,3 +28,14 @@ The domain method behind this exact problem.
 - Top ~5 ft = proprietary well-executed STRAT-BASED SELF-CORRELATION (horizontal-vs-self/nearby in TVT scale).
 - Untried clean variant: build GR_known(TVT) from the well's OWN known zone (high-res), align each eval-GR
   window against THAT (not typewell) → read TVT directly. (Our agent only did HMM-path NCC refinement, −0.016.)
+
+## Clean self-correlation probe — DEFINITIVE NEGATIVE (2026-07-17)
+Built the sponsor's "precise" method as a blind automated block-NCC datum scan (eval-GR block shape vs a
+TVT→GR reference, TVT=U−Z, scan U, bimodal-hedged). Pooled over 773 wells:
+- ffill 15.910 · block-NCC vs TYPEWELL 103.71 · block-NCC vs SELF (own high-res known GR) **106.88**.
+Both blow up; self-reference is WORSE than typewell. Same failure as every GR datum scan (flat-U 87, agent
+oracle-cap 12, NCC-features −0.016): the GR NCC landscape's optimum is NOT at the true TVT (self-similarity).
+**Why the sponsor's version is precise and ours isn't:** StarSteer self-correlation is a HUMAN/AutoSteer-AI
+INTERACTIVELY tuning the bed-DIP interpretation to align the curves — judgment avoids the bimodal traps. The
+precision is in the guided structural model, not the GR match. NOT reproducible as a blind scan/feature.
+**GR LEVER DEFINITIVELY CLOSED** (3 methods × multiple formulations, all negative). 11.042 (v18) stands.
