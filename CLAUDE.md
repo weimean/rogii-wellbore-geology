@@ -65,6 +65,7 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | ~~+ strengthen formation (uncertainty+cross-signals+savgol)~~ (REVERTED) | — | 11.503 | +5 feats + savgol regressed; formation-plane lever saturated; kernel v17 reverted; notes/14 |
 | **+ likelihood-weighted PF ensemble (BEST)** | — | **11.042** | 8-seed PF, softmax(loglik/scale) over {3,5,8,12}; marginal −0.06; kernel v18; notes/14 |
 | ~~+ fusion-weight cut (blend 0.75→0.90)~~ (REVERTED) | 10.80 | 11.072 | −0.10 grouped CV but +0.03 public (CV-overfit blend); reverted; kernel v19; notes/15 |
+| **+ TabICL foundation model (BEST)** | — | **11.020** | offline TabICLv2 regressor blended 0.35 (diff function class, like MLP); −0.022; kernel v20; notes/17 |
 
 - **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`, kernel v18, ref 54757027 (BEST)): seed-ensembled LGB+Cat
   (3 seeds, step=5) ⊕ PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP** ⊕ **crude spatial** ⊕
