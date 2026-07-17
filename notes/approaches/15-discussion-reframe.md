@@ -97,3 +97,15 @@ Option 2 (GR) rigorous negative; option 3 (meta) marginal −0.03. No meaningful
 remains beyond 11.042. The exploration's lasting value: (1) our 11.042 is HONEST + ROBUST (leak notebooks
 predicted to shake to ~10 private); (2) the top ~5-6 is proprietary GR + within-field spatial we can't fully
 crack; (3) our blend slightly over-weights fusion. Recommendation: bank 11.042 (kernel v18).
+
+## GR hunt round 2 — windowed-NCC/DTW alignment FEATURES also fail (2026-07-17)
+Dedicated agent built the alignment families we lacked (the 9.251 notebook's angle): windowed-NCC
+refinement of the HMM path (per-row delta scan, box-window GR cross-correlation → best-offset/peak/sharpness
+across ref×window scales, 18 features). Correctly ruled out Z-based datum scan (dead, 87-104) and
+monotone-DTW-to-TVT-sorted-reference (invalid — TVT(MD) is non-monotone in the lateral).
+- Grouped-CV OOF: base (rich+formation) 10.9167 → +NCC **10.9329 (−0.016, WORSE)**. Redundant with our
+  existing point-wise multi-offset GR grids; adds only noise.
+**GR lever EXHAUSTIVELY settled (two agents, many formulations):** direct prediction caps ~12 (oracle,
+GR-corr 0.65 at true TVT); windowed-NCC/DTW features don't add. The top teams' ~5ft is a genuinely
+undisclosed formulation not reproducible from thorough GR feature engineering. **11.042 (v18) stands as our
+honest, robust best.** Cache: /tmp/rogii_ncc.npz, probes: tools/gr_align_ncc.py, tools/ncc_stack_test.py.
