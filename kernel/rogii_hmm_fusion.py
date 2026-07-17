@@ -10,8 +10,22 @@ import pandas as pd
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter1d
 from sklearn.linear_model import Ridge
+import subprocess, sys, threading
 
 TARGET_INPUT = "TVT_input"
+
+# ---- optional TabICL (tabular foundation model, OFFLINE) for ensemble diversity (notes/17) ----
+_TABICL_CKPT = None
+try:
+    _wh = glob.glob("/kaggle/input/**/tabicl-*.whl", recursive=True) + glob.glob("/kaggle/input/**/einops-*.whl", recursive=True)
+    if _wh:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--no-index", "--no-deps", *_wh], check=False)
+    _ck = glob.glob("/kaggle/input/**/tabicl-regressor-*.ckpt", recursive=True)
+    _TABICL_CKPT = _ck[0] if _ck else None
+    print("TabICL ckpt:", _TABICL_CKPT)
+except Exception as _e:
+    _TABICL_CKPT = None
+_TABICL_LOCK = threading.Lock()
 
 # ---- locate competition data (robust to mount path) -------------------------
 def _find_split_dirs():
@@ -683,8 +697,19 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
                          batch_size=4096, learning_rate_init=1e-3, early_stopping=True,
                          n_iter_no_change=8, max_iter=120, random_state=sd).fit(Xs, y[tm])
             for sd in (0, 1)]
+    tabicl = None
+    if _TABICL_CKPT:
+        try:
+            from tabicl import TabICLRegressor
+            ci = np.random.default_rng(1).choice(len(y), min(10000, len(y)), replace=False)
+            tabicl = TabICLRegressor(model_path=_TABICL_CKPT, allow_auto_download=False, device="cpu",
+                                     n_estimators=4, batch_size=4, kv_cache=True)
+            tabicl.fit(np.nan_to_num(X[ci], nan=0.0, posinf=0.0, neginf=0.0), y[ci])
+            print(f"TabICL fit on {len(ci)} context rows")
+        except Exception as e:
+            print("TabICL fit FAILED:", repr(e)[:200]); tabicl = None
     return {"models": models, "mlps": mlps, "scaler": scaler, "spatial_ref": spatial_ref, "formation_ref": formation_ref,
-            "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
+            "tabicl": tabicl, "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
 
 
 def gbm_stack(well, level_model, gbm, blend=0.75):
@@ -698,6 +723,19 @@ def gbm_stack(well, level_model, gbm, blend=0.75):
         pred = 0.7 * gbm_pred + 0.3 * np.mean([m.predict(Xs) for m in gbm["mlps"]], axis=0)
     else:
         pred = gbm_pred
+    # TabICL diversity (notes/17): predict on a coarse per-well subsample + interpolate the smooth
+    # correction (keeps CPU cost tiny); blend 0.35. Serialised (lock) so the threaded loop is safe.
+    if gbm.get("tabicl") is not None:
+        try:
+            Xf = np.nan_to_num(f["X"], nan=0.0, posinf=0.0, neginf=0.0)
+            n = len(Xf); step = max(1, n // 40); idx = np.arange(0, n, step)
+            if idx[-1] != n - 1:
+                idx = np.append(idx, n - 1)
+            with _TABICL_LOCK:
+                tp = gbm["tabicl"].predict(Xf[idx])
+            pred = 0.65 * pred + 0.35 * np.interp(np.arange(n), idx, tp)
+        except Exception as e:
+            print("TabICL predict skip:", repr(e)[:120])
     gbmA = f["anchor"] + pred
     out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]
     return out
