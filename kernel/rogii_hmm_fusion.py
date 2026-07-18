@@ -701,7 +701,7 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     if _TABICL_CKPT:
         try:
             from tabicl import TabICLRegressor
-            ci = np.random.default_rng(1).choice(len(y), min(10000, len(y)), replace=False)
+            ci = np.random.default_rng(1).choice(len(y), min(16000, len(y)), replace=False)
             tabicl = TabICLRegressor(model_path=_TABICL_CKPT, allow_auto_download=False, device="cpu",
                                      n_estimators=4, batch_size=4, kv_cache=True)
             tabicl.fit(np.nan_to_num(X[ci], nan=0.0, posinf=0.0, neginf=0.0), y[ci])
@@ -728,12 +728,12 @@ def gbm_stack(well, level_model, gbm, blend=0.75):
     if gbm.get("tabicl") is not None:
         try:
             Xf = np.nan_to_num(f["X"], nan=0.0, posinf=0.0, neginf=0.0)
-            n = len(Xf); step = max(1, n // 40); idx = np.arange(0, n, step)
+            n = len(Xf); step = max(1, n // 70); idx = np.arange(0, n, step)
             if idx[-1] != n - 1:
                 idx = np.append(idx, n - 1)
             with _TABICL_LOCK:
                 tp = gbm["tabicl"].predict(Xf[idx])
-            pred = 0.65 * pred + 0.35 * np.interp(np.arange(n), idx, tp)
+            pred = 0.5 * pred + 0.5 * np.interp(np.arange(n), idx, tp)
         except Exception as e:
             print("TabICL predict skip:", repr(e)[:120])
     gbmA = f["anchor"] + pred
