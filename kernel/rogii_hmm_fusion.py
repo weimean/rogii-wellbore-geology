@@ -701,7 +701,7 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     if _TABICL_CKPT:
         try:
             from tabicl import TabICLRegressor
-            ci = np.random.default_rng(1).choice(len(y), min(16000, len(y)), replace=False)
+            ci = np.random.default_rng(1).choice(len(y), min(10000, len(y)), replace=False)
             tabicl = TabICLRegressor(model_path=_TABICL_CKPT, allow_auto_download=False, device="cpu",
                                      n_estimators=4, batch_size=4, kv_cache=True)
             tabicl.fit(np.nan_to_num(X[ci], nan=0.0, posinf=0.0, neginf=0.0), y[ci])
