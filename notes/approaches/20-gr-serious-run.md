@@ -42,6 +42,23 @@ already in the base — the GBDT already extracts it. **The rich-GR-match family
 encodes the residual VALUES the model can regress; the peak-TVT family re-encodes the same physics as a
 noisier argmax and adds nothing.**
 
+### Is the −0.003 a real negative or a flawed eval? — INTERROGATED, negative is GENUINE
+Challenged the result. Three eval-flaw hypotheses, each independently excluded:
+1. **Empty/NaN features?** No — stack OOF moved 10.9167→10.9197 (not *exactly* base), so the GBDT split on
+   live, varying features out-of-fold; they just didn't help.
+2. **Row misalignment (scrambled → looks like noise)?** No — the DIRECT signal test (`sanity`, recomputes
+   `build_well` fresh per-well, zero cache/stack/CV dependency) shows the offset is noise on its own.
+3. **Grouped-CV understatement (the spatial 20× trap)?** N/A — `sanity` uses no CV and no neighbour wells;
+   understatement cannot rescue a feature that has no underlying signal.
+
+Direct signal test (`gr_peak_probe.py sanity 250`, 1.21M eval rows): ffill 16.088, **HMM 16.057**, but
+`HMM + NCC-peak-offset` = **57.9–59.8 (typewell), 39.7–45.3 (self)** — 2.5–3.6× WORSE than HMM. The global
+NCC argmax over ±90 ft lands essentially at random and yanks the level tens of ft the wrong way. BOTH
+references (tw AND self) fail independently → not a reference bug, it's the physics: GR self-similarity (corr
+0.65) makes the NCC surface near-flat/multimodal so the peak is spurious. The stack OOF (−0.003) and the
+direct predictor (RMSE 58 vs 16) agree from opposite directions: the representation genuinely carries no
+extractable TVT signal.
+
 **CONCLUSION: the top teams' honest ~5 is NOT reachable via any GR-alignment FEATURE representation we can
 build (three now tried: direct-predict, NCC-refinement, full peak-TVT family — all flat/negative).** It is
 their PROPRIETARY human/AI-guided dip interpretation (the ROGII StarSteer workflow, notes/16), which is not a
