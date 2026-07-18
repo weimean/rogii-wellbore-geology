@@ -88,8 +88,13 @@ cluster FORKING the public leak notebooks.
   representation is genuinely better and we never found it.
 - On PRIVATE: our 11.020 is leak-free (holds); the ~7 forkers likely shake to ~10 (k256). So we'd land near
   the shaken forkers (~10-11), with the honest top (~5) clearly ahead — **mid-pack, NOT well-positioned.**
-- **OPEN: find the GR/feature method that reaches ~5 honestly** (it demonstrably exists). Likely rich
-  GR-alignment FEATURES fed to GBDT (k256: "the input features matter"), NOT a direct GR predictor — the
-  NCC-peak-TVT family (per-row "what TVT does this GR window match", multi-scale, typewell+self) we haven't
-  built properly. Don't conclude a ceiling from per-feature/direct-prediction probes (that mistake cost us
-  the 13.52 "ceiling" too). notes/20.
+- **GR-feature route now CLOSED (2026-07-18, notes/20).** Built the full NCC-peak-TVT family properly —
+  128 features (typewell+self, σ={1,3,8} × windows {8,15,30,60}: peak-TVT/peak-value/2nd-peak/sharpness +
+  aggregates) — the exact "build the whole family, don't probe one at a time" method that broke the 13.52
+  ceiling. Grouped-CV OOF: base 10.9167 → +grpeak 10.9197 (**−0.0030, WORSE**). Trustworthy (per-row
+  self+typewell GR, no neighbours → no understatement). Flat because the peak-LOCATION is too noisy (GR corr
+  0.65 → argmax lands on wrong offset) AND redundant with the rich GR-match residual grids already in base.
+  **Three GR representations now tried (direct-predict, NCC-refine, full peak-TVT family) — all flat/negative.**
+- **So the honest ~5 gap is NOT closable by any GR feature we can build.** It is the top teams' PROPRIETARY
+  human/AI-guided dip interpretation (ROGII StarSteer, notes/16) — not a reproducible offline feature. No
+  further reproducible honest lever is identified. BEST STAYS v20/public 11.020.
