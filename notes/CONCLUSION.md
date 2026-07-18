@@ -65,6 +65,28 @@ per well ── LEVEL ANCHOR (Ridge: v50,v200,gr_off,eval_len,known_range) ─�
 - Geology typewell column, formation TOPS as labels: TRAIN-ONLY leak (reverted, notes/11).
 - **TabPFN:** non-commercial license (Prior Labs) bars competition use + needs a token → excluded — notes/17.
 
+## 3b. Session 2026-07-19 — four more levers tested, all CLOSED (we are at tracker/feature parity)
+Chased the honest sub-9 gap after confirming (via a research agent) that the top-team method is a
+constrained beam-search Viterbi/DTW dip correlation. Every reproducible lever came back negative:
+- **GR NCC-peak-TVT feature family** (128 feats): grouped-CV −0.003; peak-offset is noise (RMSE 58 vs HMM
+  16), redundant with the rich GR-match grids — notes/20.
+- **Spatial imputation squeeze** (FormationPlaneKNN k=10→60 + universal kriging): LOWO imputation halved
+  (88.7→25.2) but public REGRESSED 11.020→11.594 — the k=10 plane's wild tvtF on isolated wells was
+  PROTECTIVE (GBM distrusts via knn_d); smoothing it made the GBM over-trust a still-wrong surface. A
+  better metric was actively misleading — notes/21.
+- **Beam-DP dip family** (the reproduced top-team "auto-dip", 7 stiffness paths): grouped-CV −0.074;
+  `corr(beam_mean, our HMM) = 0.9997` — a different SOLVER of the same GR problem, not a new signal — notes/22.
+- **Output postprocessing** (per-well Savitzky-Golay + distance ramp): non-lever (−0.001); our predictions
+  are already smooth (soft posterior means, not jagged beam paths) — notes/23.
+- **z-velocity-coupled PF** (geometry prior `dTVT=β·dZ`): catastrophic (RMSE 108); `dZ ⊥ dTVT` — TVT is
+  driven by structural dip, not bit vertical motion. The sub-9 `run_pf_z` works only because it's a
+  GR-PF with a z motion prior → redundant with our HMM/PF — notes/24.
+
+**Verdict: we are at parity with the top teams on everything reproducible** (tracking, feature richness,
+output shape). Each "top-team secret" turned out to be something we already have in a different form. The
+sub-9 gap is the train/test well-ID leak (non-transferable to private — deliberately not chased) +
+proprietary human interpretation that is not an offline feature. **11.020 is our honest ceiling.**
+
 ## 4. Key principles (transferable)
 1. **Never conclude a ceiling from per-feature probes.** Isolated features read ≈+0.01; the top teams' rich
    feature FAMILY + a strong model cleared −0.27, then the spatial family −1.85. The "13.52 ceiling" I
