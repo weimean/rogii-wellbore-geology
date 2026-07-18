@@ -1,76 +1,85 @@
 # ROGII Wellbore Geology — Final Conclusion
 
-**Task:** predict eval-zone TVT (True Vertical Thickness) for horizontal wells. Metric: RMSE.
-**Final model:** `gbm_stack` (`configs/gbm_stack.yaml`) — seed-ensembled LGB+Cat — **CV 13.468 / public 13.288 (best on both)**.
-**Verdict:** at the input-limited ceiling. The remaining error is structurally irreducible with
-the data available at inference.
+**Task:** predict eval-zone TVT (True Vertical Thickness, ft) for horizontal wells. Metric: pooled RMSE.
+**Best model:** kernel **v20** (`gtwm98/rogii-hmm-fusion`, ref 54788815) — **public 11.020**, fully honest & rules-compliant.
+**Session arc:** ffill 15.91 → 13.288 (pre-breakthrough) → **11.020** (−2.27 public this arc), all reproducible/honest.
+**Verdict:** at the *reproducible* honest ceiling. The remaining gap to the top (~5-6) is (a) an undisclosed
+human/AI-guided GR interpretation and (b) a train/test well-ID leak we deliberately don't chase (it likely
+shakes down to ~10 on the private LB). Our 11.020 is honest and well-positioned for the private board.
 
 ---
 
-## 1. The model (what we ship)
+## 1. The model we ship (kernel v20)
 
-Anchor-then-residual, diverse-algorithm stack (all inputs test-available):
+Anchor-then-residual, diverse-algorithm stack (every input available at inference):
 
 ```
-per well ── LEVEL ANCHOR (Ridge on v50,v200,gr_off,eval_len,known_range) ─┐
-        ├── HMM posterior  (2nd-order (TVT,dip-rate) grid, fwd-backward)   ├─ variance FUSION
-        └── PARTICLE FILTER (bootstrap, different algorithm)               ┘   (trust HMM where
-                                    │                                            hmm_std low)
-              _stack_features (~34 cols: HMM/PF posteriors, trajectory, GR,
-              anchor/fusion, uncertainty group A, GR-envelope group B)
-                                    │
-              GBM STACK: mean(LightGBM×3 seeds, CatBoost×3 seeds) on target = TVT-anchor,
-              trained on every 5th eval row (subsample = regularization)
-                                    │
-              final = 0.75·(anchor+mean(6 boosters)) + 0.25·fusion   # blend re-tuned; adaptive per-well hurt public, reverted
+per well ── LEVEL ANCHOR (Ridge: v50,v200,gr_off,eval_len,known_range) ─┐
+         ── 2nd-order (TVT,dip-rate) fwd-bwd HMM ── posterior mean/var ─┤
+         ── bootstrap particle filter (TVT,dip-rate) ──────────────────┤  variance
+         ── likelihood-weighted 8-seed PF ensemble (scales 3/5/8/12) ───┤  FUSION
+                                                                        │
+   FEATURES fed to the residual stack (target = TVT − anchor):
+     • rich multi-offset GR-match grids (hgr − typewell_GR(anchor+off), ~11 offsets ×3 anchors)
+     • GR rolling/lag/lead/deriv/envelope stats
+     • A (HMM-PF disagreement) + B (GR envelope/energy)
+     • SPATIAL formation-plane: FormationPlaneKNN (6 formations, WLS plane over k=10 nearest OTHER
+       wells, self-excluded) + dense ANCC + per-well datum b (seg variants) → tvtF_{6}, tvt_dense, gates
+     • crude spatial mean-surface drift (sp_drift, sp_nndist, sp_impd)
+   MODELS: LightGBM×3 + CatBoost×3 (seed-ens, step=5 subsample) ⊕ MLP(256,128,64) ⊕ TabICL(v2 regressor)
+   BLEND (correction): 0.65·(0.7·GBM + 0.3·MLP) + 0.35·TabICL
+   FINAL: out = 0.75·(anchor + correction) + 0.25·fusion
 ```
 
-Progression (773-well GroupKFold CV): ffill 15.91 → level_regression 15.33 → hmm_fusion 14.22 →
-gbm_stack(HistGBM) 13.77 → +PF 13.53 → +A/B 13.54 → LGB+Cat @ step=5 13.52 → **+seed-ensemble = 13.50**.
-Seed-ensembling removes the single-seed lockbox lottery (spread ~0.08) and reduces variance.
+- **TabICL** (BSD-3, soda-inria) runs OFFLINE on CPU (`model_path`, `allow_auto_download=False`,
+  `n_estimators=4`, `kv_cache=True`); fit on 10k context rows; predict per-well on a coarse 40-row subsample
+  + interpolate the smooth correction (keeps CPU cost tiny); serialised with a lock in the threaded loop.
+- Delivery: offline dataset `gtwm98/rogii-tabicl-offline` (tabicl+einops wheels + 114MB ckpt). `enable_gpu=false`
+  (Kaggle P100 torch is broken for sm_60; TabICL is CPU; GBM boosters keep a CPU fallback).
+- Kernel runtime ~1.4h (safely under the 9h cap). Resubmit: `api.competition_submit_code(competition=...,
+  file_name="submission.csv", kernel="gtwm98/rogii-hmm-fusion", kernel_version=20)` (Python API — the CLI
+  `-k -v` form 400s without `file_name`).
 
-## 2. Why 13.5 is the ceiling (all proven by measurement, notes 09-11)
+## 2. Lever ledger — what WORKED (all honest, all shipped)
+| Lever | Public | Note |
+|---|---|---|
+| rich multi-offset GR-match features | — | broke the FALSE "13.52 ceiling" (it was feature-poverty) — notes/12 |
+| MLP neural-net diversity | 12.948 | 0.7·(LGB+Cat)+0.3·MLP; different function class (corr 0.64) — notes/12 |
+| **spatial formation-plane (offset wells)** | **11.101** | **−1.85, the breakthrough**; grouped CV UNDERSTATES it 20× — notes/13-14 |
+| likelihood-weighted PF ensemble | 11.042 | marginal −0.06 (we already have a PF) — notes/14 |
+| **TabICL foundation model** | **11.020** | −0.022, a different function class; BSD-3, compliant — notes/17 |
 
-Error budget: **68% LEVEL + 15% trend + 18% wiggle**. Oracle bounds: constant 9.04, linear 6.70.
+## 3. Lever ledger — what's CLOSED / NEGATIVE (measured, not assumed)
+- **GR wiggle matching** (direct scan, affine-cal, bimodal, NCC, DTW, self-correlation): physics-capped ~12
+  (GR corr 0.65 at true TVT; self-similar in the ±20ft band). Two dedicated agents + many probes, all
+  negative. The ROGII webinar confirms the precise method is HUMAN/AI-guided dip interpretation, not a
+  reproducible feature/scan — notes/15-16.
+- **The 18% wiggle is irreducible for us:** not from GR (above), and **doesn't transfer between wells**
+  (neighbour TVT-transfer 25 vs smooth-surface 8.4 on close-neighbour wells — each well's wiggle is its
+  own) — notes/19.
+- **Per-well adaptivity burned us 4×** (all CV-good/public-bad or negative): adaptive blend, fusion-weight
+  cut (0.75→0.90: −0.10 CV / +0.03 public), TabICL tuning (blend 0.5: +0.05), prefix-CV self-calibration
+  (corr 0 with eval error; shrinkage hurts) — notes/15,18.
+- Anisotropic kriging of the per-well level: worse than null (level is survey-density-limited) — notes/15.
+- Meta-stack-of-stacks: marginal −0.03 CV — notes/15.
+- Geology typewell column, formation TOPS as labels: TRAIN-ONLY leak (reverted, notes/11).
+- **TabPFN:** non-commercial license (Prior Labs) bars competition use + needs a token → excluded — notes/17.
 
-| Component | Status | Evidence |
-|----|----|----|
-| LEVEL (per-well offset) | geology-locked | 4 levers (velocity, spatial, GR-align ×2) all die at offset R²≈0.10; full stack reaches 0.337 by confidence-weighting |
-| TREND (per-well slope) | geology-locked | OOF R²≈0 from velocity/Z/GR; pre-PS drift doesn't continue (driller steers back) |
-| WIGGLE | saturated | HMM+PF+LGB+Cat; residual has NO directional signal in any available feature |
+## 4. Key principles (transferable)
+1. **Never conclude a ceiling from per-feature probes.** Isolated features read ≈+0.01; the top teams' rich
+   feature FAMILY + a strong model cleared −0.27, then the spatial family −1.85. The "13.52 ceiling" I
+   declared repeatedly was FEATURE-POVERTY.
+2. **Diversity must come from a DIFFERENT ALGORITHM** (not a restatement): PF over HMM (+0.24), MLP over
+   LGB/Cat (−0.20 pooled), TabICL over all (−0.022). Each is worse alone but decorrelated.
+3. **Grouped CV UNDERSTATES spatial/offset-well features ~20×** — it strips each well's pad-neighbours into
+   the held-out fold, but the scored TEST wells ARE offset wells to train. For anything using neighbours,
+   trust the public LB, not grouped CV. (Opposite trap: the geology leak was CV-good/public-bad.)
+4. **Per-well adaptivity / blend re-tuning is public-noisy** — 4 reverts. Global, out-of-fold changes only.
+5. **Verify a feature EXISTS at inference** (geology leak) and **verify licenses** (TabPFN) before shipping.
 
-**The deepest reason (`tools/tops_probe.py`):** TVT = f(Z, formation tops) with per-well R²=1.0 —
-geology *perfectly* determines TVT. But f is per-well (each well has its own geological datum), and
-the tops are **train-only**. Even ORACLE eval tops add only +0.014 to the offset without the per-well
-frame. The eval level is a per-well constant defined in a reference frame the test set withholds.
-Residual analysis (`tools/residual_diag.py`): error grows 7.3→17.1 with eval depth; median well RMSE
-is 8.6 (≈oracle) — the pooled 13.5 is a tail of long, undirectable laterals.
-
-## 3. The leak, resolved (notes: leaderboard-intel memory)
-
-- The 3 wells in `data/raw/test/` are **format examples** that happen to be identical to train wells
-  (leaked). They are **NOT the scored set** — the real test is hidden.
-- **The public LB is a trustworthy hidden test that tracks CV** (phase-2 CV 13.52 / public 13.60).
-  Proven by submitting a twin-matcher leak probe (`kernel_leakprobe/`): it overrides any test well
-  that matches a train twin with the twin's true TVT — and scored **13.604 = phase-2's 13.601**, i.e.
-  the real scored test has **no exploitable duplicates**. Trust both CV and public; they agree.
-- **Geology was a leakage trap** (notes/11): typewell `Geology` is train-only; it gave −0.53 CV but
-  the feature is absent at inference → public got worse (13.93). Reverted.
-- **Competitor 7.016 notebook** (evaluated in full): its anchor family = ours; its gains rely on a
-  same-well contact override (yields nothing on the real test, per our probe) and its novel ideas
-  (datum projection, spatial-tops) fail on our CV (imputed tops → 51 RMSE). Likely pretrained-artifact
-  based; not reproducible honestly.
-
-## 4. Reproduce / operate
-
-- CV table: `uv run python -u tools/reproduce_cv.py` (~15 min).
-- Fast experiment harness: `tools/frontier_fast.py` (cached matrix + train subsampling).
-- Caches (wiped on reboot): `_cache_base.py` → `/tmp/rogii_feats.npz` + `rogii_pf.npz`.
-- Submit: kernel `gtwm98/rogii-hmm-fusion` (v8 = current seed-ensemble); the tools index is `tools/README.md`.
-
-## 5. Honest final position
-
-We are near the true structural limit for these inputs. There is no dishonest-free headroom of
-consequence: level+trend (83%) is geology the test withholds, wiggle is saturated, and the LB is
-trustworthy so there is no leak to mine. The deliverable is a rigorous, well-validated model **and**
-a measured proof of its ceiling.
+## 5. The remaining gap (honest)
+Top public ~5-6 (single model) / ~7 (leak notebooks). Ours 11.020. The gap is: (a) the DATUM for isolated
+wells (no close neighbour) — survey-density-limited, ~10 there, dominates the error; (b) the WIGGLE — needs
+the proprietary human/AI-guided GR/dip interpretation (StarSteer), not reproducible automatically; (c) the
+train/test well-ID leak — non-transferable to private (k256, 12th, predicts the ~7.3 notebooks shake to ~10).
+We captured everything honest and reproducible. **11.020 is the honest ceiling with the methods available.**

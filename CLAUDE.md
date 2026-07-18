@@ -67,10 +67,11 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | ~~+ fusion-weight cut (blend 0.75→0.90)~~ (REVERTED) | 10.80 | 11.072 | −0.10 grouped CV but +0.03 public (CV-overfit blend); reverted; kernel v19; notes/15 |
 | **+ TabICL foundation model (BEST)** | — | **11.020** | offline TabICLv2 regressor blended 0.35 (diff function class, like MLP); −0.022; kernel v20; notes/17 |
 
-- **Current best = `gbm_stack`** (`configs/gbm_stack.yaml`, kernel v18, ref 54757027 (BEST)): seed-ensembled LGB+Cat
-  (3 seeds, step=5) ⊕ PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP** ⊕ **crude spatial** ⊕
-  **rich formation-PLANE features** (FormationPlaneKNN + dense ANCC), final blend 0.75. **Public 11.042** — from a starting ffill of 15.9, and 13.288 before this
-  session's rich-features/MLP/spatial run (−1.45 this session). See notes/approaches/12–13.
+- **Current best = kernel v20** (`gtwm98/rogii-hmm-fusion`, ref 54788815 (BEST)): seed-ensembled LGB+Cat
+  (3 seeds, step=5) ⊕ PF ⊕ lik-PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP** ⊕ **crude spatial** ⊕
+  **rich formation-PLANE features** (FormationPlaneKNN + dense ANCC) ⊕ **TabICL foundation model** (BSD-3, offline),
+  correction = 0.65·(0.7·GBM+0.3·MLP)+0.35·TabICL, final blend 0.75. **Public 11.020** — from ffill 15.9 and 13.288
+  pre-breakthrough (−2.27 this arc). **Fully honest & rules-compliant.** Full ledger + resubmit steps: notes/CONCLUSION.md.
 - ⚠️ **The "13.52 ceiling" was FEATURE-POVERTY, not input-limited.** I declared an input-limited ceiling
   multiple times based on testing features IN ISOLATION (each new feature ≈ +0.01). WRONG. Reproducing the
   top teams' rich feature *family* (multi-offset GR-match grids `tda/tdpf/tdhmm{offset}` = horizontal GR
