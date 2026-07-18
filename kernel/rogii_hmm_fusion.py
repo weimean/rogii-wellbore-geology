@@ -472,8 +472,10 @@ def _seg_b_well(ktvt, kz, form_col):
 
 class _FormationPlaneKNN:
     """Offset-well datum lever (notes/14): per-well median formation surfaces -> local IDW plane fit
-    over k nearest OTHER wells -> formation surface at a query X,Y. Test-legal (needs only X,Y)."""
-    def __init__(self, wells, k=10):
+    over k nearest OTHER wells -> formation surface at a query X,Y. Test-legal (needs only X,Y).
+    k=60 + universal kriging (plane + IDW of plane residuals): halves near-neighbour imputation error
+    vs the old k=10 plane on the honest LOWO harness (notes/21)."""
+    def __init__(self, wells, k=60):
         from scipy.spatial import cKDTree
         self.k = k; rows = []
         for w in wells:
@@ -512,7 +514,13 @@ class _FormationPlaneKNN:
         except Exception:
             coef = np.stack([np.linalg.pinv(A[r]) @ rhs[r] for r in range(len(q))])
         Xq = xy_q[:, 0]; Yq = xy_q[:, 1]
-        pred = (Xq[:, None] * coef[:, 0, :] + Yq[:, None] * coef[:, 1, :] + coef[:, 2, :]).astype(np.float32)
+        pred = (Xq[:, None] * coef[:, 0, :] + Yq[:, None] * coef[:, 1, :] + coef[:, 2, :]).astype(np.float64)
+        # universal kriging: add IDW of the plane residuals at the neighbours (local correction)
+        plane_n = xn[:, :, None] * coef[:, None, 0, :] + yn[:, :, None] * coef[:, None, 1, :] + coef[:, None, 2, :]
+        resid = fn - plane_n                                   # (q, k, 6)
+        w2 = np.where(vk, 1.0 / (dk + 1e-3) ** 2, 0.0)         # (q, k)
+        resid_q = (w2[:, :, None] * resid).sum(1) / (w2.sum(1)[:, None] + 1e-12)
+        pred = (pred + resid_q).astype(np.float32)
         pred[~vk.any(1)] = self.fa.mean(0)
         return pred, np.where(vk, dk, np.inf).min(1).astype(np.float32)
 
