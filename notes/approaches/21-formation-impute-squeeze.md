@@ -41,11 +41,27 @@ is better even for close twins. Quadratic overfits the sparse neighbour set cata
 same test-legality (only X,Y + neighbours' surfaces). Per-well impute ~6× slower (bigger neighbour fetch)
 but still a small fraction of the ~1.4h kernel.
 
-## Validation status
-Grouped/stack CV UNDERSTATES this (near-set barely appears when pad-neighbours are stripped) → the ONLY
-trustworthy arbiter is the **public LB** (every spatial gain in this project was validated there, not on CV).
-NEXT: push kernel, submit, compare vs v20/11.020. If it helps → keep; if flat/worse → revert (the imputation
-metric is much better, but the GBM-interaction / knn_d-gate effect is what public decides).
+## RESULT (public): REGRESSED 11.020 → 11.594 (+0.57). REVERTED to k=10 plane.
+kernel v23, ref 54811529, clean run (TabICL + formation both fired, 0 NaN, 76min). Despite the imputation
+metric being MUCH better (pooled 88.7→25.2), public got WORSE. **A better imputation metric did NOT mean a
+better score** — exactly the GBM-interaction risk flagged before submitting.
+
+**Post-mortem (the lesson):** the old k=10 plane produced WILD tvtF (123 RMSE) on the 45% isolated /
+medium-distance wells. That wildness was PROTECTIVE — the GBM learned to distrust tvtF there (via the knn_d
+gate), so the feature effectively only fired for genuine close twins, where it helped (the −0.74 v16 lever).
+uk_k60 replaced the wild estimate with a SMOOTH, plausible-looking regional surface (25 RMSE) — but 25 is
+still worse than ffill (15) on isolated wells. Smooth-but-still-wrong reads as trustworthy, so the GBM
+OVER-trusts it and gets pulled toward a regional-mean surface where it should have leaned on the anchor. Net
+worse. **Improving imputation accuracy on the ISOLATED-well regime is counterproductive; the knn_d gate
+relied on those estimates looking obviously bad.**
+
+**Corollary for any future spatial squeeze:** improve tvtF ONLY where a genuine close neighbour exists
+(small knn_d); leave (or make MORE obviously untrustworthy) the isolated-well estimate so the GBM keeps
+falling back to the anchor. A distance-thresholded UK (apply uk only when knn_d < ~50ft, else keep the old
+plane or NaN) is the correct shape — but that is another submission to test. NOT pursued now.
+
+BEST STAYS v20 / public 11.020. The point-level idea below is DE-PRIORITIZED — it would improve the same
+isolated-well regime that just backfired, unless gated to close neighbours only.
 
 ## Open (untried, higher headroom toward oracle 0.005)
 POINT-LEVEL imputation: fit through nearby formation PICKS (not well-medians), preserving along-lateral
