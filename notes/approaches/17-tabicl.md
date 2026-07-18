@@ -21,3 +21,11 @@ GBM 10.77 · **TabICL 10.68** (beats GBM despite 20× less training data — in-
 ## Result: public 11.042 → **11.020** (−0.022), kernel v20 = new BEST.
 Smaller than the −0.22 CV signal (MLP overlap + 0.35 weight + subsample smoothing). Likely more to extract:
 higher blend (0.5), more context (15-20k), finer subsample (60-80/well), n_estimators=8.
+
+## TabPFN (2nd foundation model) — BLOCKED by license (2026-07-18)
+Value-tested TabPFN alongside TabICL on Kaggle: `TabPFNLicenseError` — TabPFN needs a one-time interactive
+license acceptance / TABPFN_TOKEN (browser account at ux.priorlabs.ai) to download weights; a kernel has no
+interactive terminal, and internet is off for the submission anyway. Requires the USER to accept the license
++ supply a token (I don't create accounts / accept licenses). Even unblocked it's a foundation model like
+TabICL -> likely redundant. Not pursued. TabICL (open, no token) remains the foundation-model lever.
+BEST STANDS: kernel v20, public 11.020.
