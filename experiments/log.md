@@ -85,3 +85,9 @@ Metric: **RMSE** (lower is better; Kaggle scores √MSE). Always report **groupe
 ## Fusion-weight cut v19 — REVERTED (2026-07-16)
 - v19 public = 11.072, WORSE than v18's 11.042 (+0.03). Blend 0.75->0.90 (fusion 0.25->0.10) gained -0.10 on grouped CV but +0.03 on public. Reverted blend to 0.75. Classic CV-overfit blend re-tune (same pattern as the reverted adaptive blend); the HMM/PF fusion helps MORE on the hidden test than on train CV. Kept the accelerator (enable_gpu + GPU LGB/Cat + threaded loops).
 - **BEST remains v18 = public 11.042.** Both push levers (GR method, meta-stack/fusion-cut) now empirically exhausted. GR = physics-capped negative; meta/blend = CV-good/public-bad. Session (across both days): 13.288 -> 11.042 honest & robust.
+
+## TabICL foundation model (2026-07-17/18)
+- **v20 = public 11.020 (BEST)**: offline TabICLv2 regressor (model_path, CPU, n_est=4, kv_cache) blended 0.35 into the correction; fit on 10k context, predict per-well on a 40-row subsample + interpolate. −0.022 over v18's 11.042. Different function class (like MLP), corr 0.91. notes/17.
+- v21 (context 16k): OOM'd (Killed at TabICL fit). Reverted to 10k.
+- v22 (blend 0.5, subsample 70): public 11.071, WORSE (+0.05). The 0.35 blend is the sweet spot (MLP already supplies overlapping diversity; 0.5 over-weights TabICL). Reverted to v20 config.
+- Offline delivery: dataset gtwm98/rogii-tabicl-offline (tabicl+einops wheels + 114MB ckpt); enable_gpu=false (P100 torch broken). BEST = kernel v20, public 11.020.
