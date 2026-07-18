@@ -29,3 +29,12 @@ interactive terminal, and internet is off for the submission anyway. Requires th
 + supply a token (I don't create accounts / accept licenses). Even unblocked it's a foundation model like
 TabICL -> likely redundant. Not pursued. TabICL (open, no token) remains the foundation-model lever.
 BEST STANDS: kernel v20, public 11.020.
+
+## LICENSE COMPLIANCE (2026-07-18) — TabICL OK, TabPFN excluded (correctly)
+- **TabICL (soda-inria, in our BEST v20): BSD 3-Clause** — permissive, commercial-use allowed, free, no
+  token, publicly downloadable weights (HF jingang/TabICL). Satisfies the competition rule "pre-trained
+  models allowed if uploaded as a dataset" (we uploaded gtwm98/rogii-tabicl-offline). **v20 / 11.020 is
+  rules-compliant.**
+- **TabPFN (Prior Labs License = Apache 2.0 + NON-COMMERCIAL restriction): NOT usable here.** License bars
+  "commercial or production purpose... competitive benchmarking... revenue-generating"; a prize competition
+  qualifies. Also needs a personal TABPFN_TOKEN. Excluded — do not use.
