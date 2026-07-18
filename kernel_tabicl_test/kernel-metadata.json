@@ -1,0 +1,16 @@
+{
+  "id": "gtwm98/rogii-tabicl-test",
+  "title": "rogii tabicl test",
+  "code_file": "tabicl_test.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": true,
+  "enable_gpu": false,
+  "enable_internet": true,
+  "dataset_sources": [
+    "gtwm98/rogii-tabicl-features",
+    "gtwm98/rogii-tabicl-offline"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}
