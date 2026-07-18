@@ -77,9 +77,19 @@ per well ── LEVEL ANCHOR (Ridge: v50,v200,gr_off,eval_len,known_range) ─�
 4. **Per-well adaptivity / blend re-tuning is public-noisy** — 4 reverts. Global, out-of-fold changes only.
 5. **Verify a feature EXISTS at inference** (geology leak) and **verify licenses** (TabPFN) before shipping.
 
-## 5. The remaining gap (honest)
-Top public ~5-6 (single model) / ~7 (leak notebooks). Ours 11.020. The gap is: (a) the DATUM for isolated
-wells (no close neighbour) — survey-density-limited, ~10 there, dominates the error; (b) the WIGGLE — needs
-the proprietary human/AI-guided GR/dip interpretation (StarSteer), not reproducible automatically; (c) the
-train/test well-ID leak — non-transferable to private (k256, 12th, predicts the ~7.3 notebooks shake to ~10).
-We captured everything honest and reproducible. **11.020 is the honest ceiling with the methods available.**
+## 5. The remaining gap (honest — CORRECTED 2026-07-18 from the actual leaderboard)
+**Leaderboard reality check (5173 teams):** #1 shu01 4.859; the top HONEST competitors (Tucker 5.44,
+Rishikesh 5.24, k256 5.86 — the same people who posted honest-method threads) reach **~5-6**. Median team
+9.4. **Ours 11.020 = rank 3214/5173 (~62nd pct, below median).** The ~7.0-7.3 band (p5-p25) is the huge
+cluster FORKING the public leak notebooks.
+- **PRIOR CLAIM "honest ceiling ~9.2" was WRONG** — that was the leak-notebook base's CV, not the top honest
+  competitors, who genuinely reach ~5 HONESTLY. So there IS a **~6 ft reproducible honest gap** we have not
+  closed. Our agents' "GR caps ~12" was true only for CRUDE point-matching; the top teams' GR/feature
+  representation is genuinely better and we never found it.
+- On PRIVATE: our 11.020 is leak-free (holds); the ~7 forkers likely shake to ~10 (k256). So we'd land near
+  the shaken forkers (~10-11), with the honest top (~5) clearly ahead — **mid-pack, NOT well-positioned.**
+- **OPEN: find the GR/feature method that reaches ~5 honestly** (it demonstrably exists). Likely rich
+  GR-alignment FEATURES fed to GBDT (k256: "the input features matter"), NOT a direct GR predictor — the
+  NCC-peak-TVT family (per-row "what TVT does this GR window match", multi-scale, typewell+self) we haven't
+  built properly. Don't conclude a ceiling from per-feature/direct-prediction probes (that mistake cost us
+  the 13.52 "ceiling" too). notes/20.
