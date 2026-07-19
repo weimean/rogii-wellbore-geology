@@ -66,9 +66,12 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | **+ likelihood-weighted PF ensemble (BEST)** | — | **11.042** | 8-seed PF, softmax(loglik/scale) over {3,5,8,12}; marginal −0.06; kernel v18; notes/14 |
 | ~~+ fusion-weight cut (blend 0.75→0.90)~~ (REVERTED) | 10.80 | 11.072 | −0.10 grouped CV but +0.03 public (CV-overfit blend); reverted; kernel v19; notes/15 |
 | **+ TabICL foundation model** | — | **11.020** | offline TabICLv2 regressor blended 0.35 (diff function class, like MLP); −0.022; kernel v20; notes/17 |
-| **+ TCN sequence model (BEST, BREAKTHROUGH)** | −0.034 | **10.852** | learned HOLISTIC GR reading (dilated temporal conv over the eval sequence); blend 0.1 into correction; grouped CV UNDERSTATED it 5× (−0.034 CV → **−0.168 public**), like spatial; kernel v25; notes/27 |
+| **+ TCN sequence model (BREAKTHROUGH)** | −0.034 | **10.852** | learned HOLISTIC GR reading (dilated temporal conv over the eval sequence); blend 0.1; grouped CV UNDERSTATED it 5× (−0.034 CV → **−0.168 public**), like spatial; kernel v25; notes/27 |
+| **+ TCN blend 0.1→0.2 (BEST)** | — | **10.760** | CV-chosen weight was too low (CV understates the lever); public −0.092; weight STILL climbing; kernel v26; notes/27 |
 
-- **Current best = kernel v25** (`gtwm98/rogii-hmm-fusion`, ref 54824955 (BEST)): seed-ensembled LGB+Cat
+- **Current best = kernel v26** (`gtwm98/rogii-hmm-fusion`, ref 54828957 (BEST), TCN blend 0.2, public **10.760**).
+  Weight still climbing (0.1→0.2 gave −0.092) → probe 0.3 next; then strengthen the TCN. Recipe below (was v25):
+  seed-ensembled LGB+Cat
   (3 seeds, step=5) ⊕ PF ⊕ lik-PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP** ⊕ **crude spatial** ⊕
   **rich formation-PLANE features** (FormationPlaneKNN + dense ANCC) ⊕ **TabICL foundation model** (BSD-3, offline) ⊕
   **TCN sequence model** (learned holistic GR reading, torch, offline, 91 honest per-well channels),
