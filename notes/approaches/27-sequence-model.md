@@ -29,10 +29,19 @@ sequential structure in the raw GR correlation the row-independent models miss.
 4. **Honest-inputs version = −0.034 at w=0.1** — drops the fit-on-train gbm/mlp from the INPUTS (keeps them
    in the OUTPUT blend). All remaining channels are honest per-well → clean kernel build, NO inner-CV needed.
 
-## Productionization (in progress)
-Ship a torch TCN into the kernel (torch already there via TabICL, CPU). Train seed-ensemble (3) on all train
-wells, inputs = rich GR-match + per-well trajectory/GR/tracker channels resampled to 256 stages, target =
-TVT − anchor; predict test wells, interpolate to full rows, blend at w≈0.1 into the correction. Caveat: the
-−0.034 is vs the PRE-TabICL baseline; on top of the full v20 stack (with TabICL, a different function class)
-expect some overlap → ~−0.02 to −0.03 on public. Public LB is the arbiter (CV-honest here, so it should
-transfer). If it clears 11.020 → new best; if flat, revert (isolated addition).
+## 🚀 PUBLIC RESULT: 11.020 → 10.852 (−0.168), NEW BEST. kernel v25, ref 54824955.
+Shipped the torch TCN into the kernel: train seed-ensemble (3) on all 773 train wells, inputs = 91 honest
+per-well channels (X[:, :-30], dropping spatial+formation+lik), resampled to 256 stages, target = TVT−anchor;
+predict test wells, interpolate, blend 0.9·correction + 0.1·TCN. Kernel log confirms `TCN trained on 773 well
+sequences (91 channels)` — torch ran on Kaggle (CPU), no fallback.
+
+**The gain was 5× the CV estimate: −0.034 grouped CV → −0.168 public.** Grouped CV UNDERSTATED the sequence
+model, like it understates spatial features. Likely reason: the final TCN trains on ALL train wells (vs 4/5
+per CV fold), and sequence models benefit from more data; the scored test wells are offset wells well-covered
+by the full train set. **So the "honest ceiling" at 11.020 was ARCHITECTURE-POVERTY, not input-limited** —
+every prior model predicted rows independently; the holistic sequential reading was the missing lever. (Same
+mistake shape as the 13.52 "ceiling" = feature-poverty.)
+
+**NEXT (headroom): the blend weight 0.1 was chosen by the UNDERSTATING CV → probably too low.** Since CV
+understates this lever, tune the blend on PUBLIC: try w=0.2, 0.3. Also worth: a stronger TCN (more channels
+incl. per-well trajectory raw, bigger/deeper, or a small transformer), more seeds. This is now the hot lever.

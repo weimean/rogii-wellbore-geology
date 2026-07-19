@@ -1,15 +1,17 @@
 # ROGII Wellbore Geology — Final Conclusion
 
 **Task:** predict eval-zone TVT (True Vertical Thickness, ft) for horizontal wells. Metric: pooled RMSE.
-**Best model:** kernel **v20** (`gtwm98/rogii-hmm-fusion`, ref 54788815) — **public 11.020**, fully honest & rules-compliant.
-**Arc:** ffill 15.91 → 13.288 (pre-breakthrough) → **11.020** (−4.89 from ffill), every gain validated on the real LB.
-**Verdict (final, thoroughly tested):** at the reproducible honest ceiling. Across the project we identified
-exactly what the top teams do (a constrained beam-search dip correlation + rich features + spatial datum),
-reproduced each piece, and proved we are at **parity on everything reproducible** — tracking, feature
-richness, output shape, and model regime. Every "top-team secret" turned out to be something we already have
-in a different form. The remaining gap to the ~5-7 cluster is (a) real-time human/AI dip interpretation (which
-an automated notebook physically cannot do) and (b) a train/test well-ID leak we deliberately don't chase (it
-shakes down to ~10 on the private LB). **v20/11.020 is the honest submission to stand on for the private board.**
+**Best model:** kernel **v25** (`gtwm98/rogii-hmm-fusion`, ref 54824955) — **public 10.852**, fully honest & rules-compliant.
+**Arc:** ffill 15.91 → 13.288 → 11.020 → **10.852** (−5.06 from ffill), every gain validated on the real LB.
+**Verdict (2026-07-19):** the "honest ceiling" I declared at 11.020 was WRONG — a **TCN sequence model broke
+it (−0.168 public)**. After closing 7 explicit levers (notes/20-26) and proving parity with the top teams on
+every *row-independent* method, the remaining gap turned out to be ARCHITECTURAL: everything predicted each
+row independently; a TCN reading the whole well as a SEQUENCE (the learned analogue of a geologist reading the
+log holistically) added a large honest gain. **Grouped CV understated it 5× (−0.034 CV → −0.168 public)** —
+like spatial, trust public for the sequence model. LIKELY MORE HEADROOM: the blend weight (0.1) was set by the
+understating CV and is probably too low; a stronger TCN/transformer may add more. **v25/10.852 is the best;
+tune the sequence-model blend on the PUBLIC LB next.** (The lesson that keeps recurring: never declare a
+ceiling — 13.52 was feature-poverty, 11.020 was architecture-poverty.)
 
 ---
 

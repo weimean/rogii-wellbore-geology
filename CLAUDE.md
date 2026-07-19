@@ -65,13 +65,21 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | ~~+ strengthen formation (uncertainty+cross-signals+savgol)~~ (REVERTED) | — | 11.503 | +5 feats + savgol regressed; formation-plane lever saturated; kernel v17 reverted; notes/14 |
 | **+ likelihood-weighted PF ensemble (BEST)** | — | **11.042** | 8-seed PF, softmax(loglik/scale) over {3,5,8,12}; marginal −0.06; kernel v18; notes/14 |
 | ~~+ fusion-weight cut (blend 0.75→0.90)~~ (REVERTED) | 10.80 | 11.072 | −0.10 grouped CV but +0.03 public (CV-overfit blend); reverted; kernel v19; notes/15 |
-| **+ TabICL foundation model (BEST)** | — | **11.020** | offline TabICLv2 regressor blended 0.35 (diff function class, like MLP); −0.022; kernel v20; notes/17 |
+| **+ TabICL foundation model** | — | **11.020** | offline TabICLv2 regressor blended 0.35 (diff function class, like MLP); −0.022; kernel v20; notes/17 |
+| **+ TCN sequence model (BEST, BREAKTHROUGH)** | −0.034 | **10.852** | learned HOLISTIC GR reading (dilated temporal conv over the eval sequence); blend 0.1 into correction; grouped CV UNDERSTATED it 5× (−0.034 CV → **−0.168 public**), like spatial; kernel v25; notes/27 |
 
-- **Current best = kernel v20** (`gtwm98/rogii-hmm-fusion`, ref 54788815 (BEST)): seed-ensembled LGB+Cat
+- **Current best = kernel v25** (`gtwm98/rogii-hmm-fusion`, ref 54824955 (BEST)): seed-ensembled LGB+Cat
   (3 seeds, step=5) ⊕ PF ⊕ lik-PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP** ⊕ **crude spatial** ⊕
-  **rich formation-PLANE features** (FormationPlaneKNN + dense ANCC) ⊕ **TabICL foundation model** (BSD-3, offline),
-  correction = 0.65·(0.7·GBM+0.3·MLP)+0.35·TabICL, final blend 0.75. **Public 11.020** — from ffill 15.9 and 13.288
-  pre-breakthrough (−2.27 this arc). **Fully honest & rules-compliant.** Full ledger + resubmit steps: notes/CONCLUSION.md.
+  **rich formation-PLANE features** (FormationPlaneKNN + dense ANCC) ⊕ **TabICL foundation model** (BSD-3, offline) ⊕
+  **TCN sequence model** (learned holistic GR reading, torch, offline, 91 honest per-well channels),
+  correction = [0.65·(0.7·GBM+0.3·MLP)+0.35·TabICL] then 0.9·(that)+0.1·TCN, final blend 0.75. **Public 10.852**
+  — from ffill 15.9 (−5.06 total; −0.17 from v20). **Fully honest & rules-compliant.** Full ledger: notes/CONCLUSION.md.
+- 🚀 **THE "HONEST CEILING" WAS FALSE — the TCN sequence model broke it (2026-07-19, notes/27).** After 7 levers
+  closed (notes/20-26) I concluded 11.020 was the honest ceiling. WRONG. The gap was ARCHITECTURAL: every model
+  predicted each row INDEPENDENTLY; a TCN reading the whole well as a SEQUENCE (the learned analogue of a
+  geologist reading the log holistically) added −0.168 public. **Grouped CV understated it 5× (−0.034)** — trust
+  public for the sequence model like for spatial. LIKELY MORE HEADROOM: the blend weight (0.1, set by the
+  understating CV) is probably too low; a stronger TCN/transformer may add more. Tune the blend on PUBLIC.
 - ⚠️ **The "13.52 ceiling" was FEATURE-POVERTY, not input-limited.** I declared an input-limited ceiling
   multiple times based on testing features IN ISOLATION (each new feature ≈ +0.01). WRONG. Reproducing the
   top teams' rich feature *family* (multi-offset GR-match grids `tda/tdpf/tdhmm{offset}` = horizontal GR
