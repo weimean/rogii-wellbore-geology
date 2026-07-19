@@ -651,6 +651,73 @@ def _stack_features(well, level_model, spatial_ref=None, formation_ref=None):
     return res
 
 
+# ---- Sequence model (TCN): the learned holistic "reading" of the raw GR correlation (notes/27) -------
+# Everything else predicts each row INDEPENDENTLY; a TCN reads the whole well as a SEQUENCE (the learned
+# analogue of a geologist reading the log). Inputs = honest per-well channels only (X minus the trailing
+# spatial(3)+formation(22)+lik(5) = 30 neighbour/derived cols) so it stays CV-honest & train/test-consistent.
+# Grouped-CV OOF −0.034 (per-well, no neighbours; different function class). Blended 0.1 into the correction.
+_TCN_S = 256          # resample each well's eval zone to this many stages
+_TCN_DROP = 30        # trailing X cols to exclude = s_cols(3) + fcols(22) + lik_cols(5)
+try:
+    import torch as _torch
+    import torch.nn as _tnn
+    _HAS_TORCH = True
+except Exception:
+    _HAS_TORCH = False
+
+
+def _resample_seq(A, S):
+    """(n, F) -> (S, F) by linear interpolation along the sequence axis."""
+    n = len(A)
+    if n == S:
+        return A.astype(np.float32)
+    ef = np.linspace(0, 1, n); grid = np.linspace(0, 1, S)
+    return np.stack([np.interp(grid, ef, A[:, j]) for j in range(A.shape[1])], 1).astype(np.float32)
+
+
+if _HAS_TORCH:
+    class _TCN(_tnn.Module):
+        def __init__(self, F, ch=48):
+            super().__init__()
+            def blk(i, o, d):
+                return _tnn.Sequential(_tnn.Conv1d(i, o, 5, padding=2 * d, dilation=d),
+                                       _tnn.ReLU(), _tnn.BatchNorm1d(o))
+            self.net = _tnn.Sequential(blk(F, ch, 1), blk(ch, ch, 2), blk(ch, ch, 4), blk(ch, ch, 8))
+            self.head = _tnn.Conv1d(ch, 1, 1)
+        def forward(self, x):                       # x: (N, S, F)
+            return self.head(self.net(x.transpose(1, 2))).squeeze(1)
+
+
+def _train_tcn(seqs, targs, n_seed=3):
+    X = np.stack(seqs); Y = np.stack(targs)          # (W,S,F), (W,S)
+    mu = X.reshape(-1, X.shape[2]).mean(0); sd = X.reshape(-1, X.shape[2]).std(0) + 1e-6
+    Xn = ((X - mu) / sd).astype(np.float32); ys = float(Y.std() + 1e-6)
+    models = []
+    for seed in range(n_seed):
+        _torch.manual_seed(seed)
+        net = _TCN(X.shape[2]); opt = _torch.optim.Adam(net.parameters(), lr=3e-3, weight_decay=1e-4)
+        lossf = _tnn.SmoothL1Loss()
+        Xt = _torch.tensor(Xn); Yt = _torch.tensor((Y / ys).astype(np.float32))
+        net.train(); idx = np.arange(len(X)); bs = 64
+        for ep in range(60):
+            np.random.RandomState(ep + 100 * seed).shuffle(idx)
+            for b in range(0, len(idx), bs):
+                bi = idx[b:b + bs].tolist()
+                opt.zero_grad(); loss = lossf(net(Xt[bi]), Yt[bi]); loss.backward(); opt.step()
+        net.eval(); models.append(net)
+    return {"models": models, "mu": mu, "sd": sd, "ys": ys}
+
+
+def _predict_tcn(tcn, Xfull):
+    """Xfull: (n, F) honest channels -> (n,) residual prediction (seed-averaged, interpolated back)."""
+    n = len(Xfull); seq = _resample_seq(Xfull, _TCN_S)
+    Xn = ((seq - tcn["mu"]) / tcn["sd"]).astype(np.float32)
+    with _torch.no_grad():
+        p = np.mean([m(_torch.tensor(Xn[None])).numpy()[0] for m in tcn["models"]], 0) * tcn["ys"]
+    ef = np.linspace(0, 1, n); grid = np.linspace(0, 1, _TCN_S)
+    return np.interp(ef, grid, p)
+
+
 def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     # Phase 2 + seed-ensemble: LightGBM + CatBoost on every step-th eval row (subsample regularizes;
     # diverse boosters; 3 seeds each averaged removes the seed lottery). Lockbox 13.77 -> 13.466.
@@ -666,9 +733,20 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
         f = _stack_features(w, level_model, spatial_ref=spatial_ref, formation_ref=formation_ref)
         if f is None or "truth" not in f:
             return None
-        return f["X"][::step], (f["truth"] - f["anchor"])[::step], f["mean_dis"]
+        resid = f["truth"] - f["anchor"]
+        seq = _resample_seq(f["X"][:, :-_TCN_DROP], _TCN_S)             # honest per-well channels -> (S,F)
+        tseq = _resample_seq(resid[:, None], _TCN_S)[:, 0]              # residual target -> (S,)
+        return f["X"][::step], resid[::step], f["mean_dis"], seq, tseq
     parts = [r for r in Parallel(n_jobs=-1, prefer="threads")(delayed(_feat)(w) for w in train_wells) if r is not None]
     X = np.vstack([p[0] for p in parts]); y = np.concatenate([p[1] for p in parts]); dis = [p[2] for p in parts]
+    # Sequence model (TCN): learned holistic reading (notes/27), trained on honest per-well sequences.
+    tcn = None
+    if _HAS_TORCH:
+        try:
+            tcn = _train_tcn([p[3] for p in parts], [p[4] for p in parts], n_seed=3)
+            print(f"TCN trained on {len(parts)} well sequences ({parts[0][3].shape[1]} channels)")
+        except Exception as e:
+            print("TCN train FAILED:", repr(e)[:200]); tcn = None
 
     def _fit_lgb(sd):  # GPU LightGBM with CPU fallback (Kaggle build may lack GPU)
         try:
@@ -711,7 +789,7 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
         except Exception as e:
             print("TabICL fit FAILED:", repr(e)[:200]); tabicl = None
     return {"models": models, "mlps": mlps, "scaler": scaler, "spatial_ref": spatial_ref, "formation_ref": formation_ref,
-            "tabicl": tabicl, "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
+            "tabicl": tabicl, "tcn": tcn, "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
 
 
 def gbm_stack(well, level_model, gbm, blend=0.75):
@@ -738,6 +816,15 @@ def gbm_stack(well, level_model, gbm, blend=0.75):
             pred = 0.65 * pred + 0.35 * np.interp(np.arange(n), idx, tp)
         except Exception as e:
             print("TabICL predict skip:", repr(e)[:120])
+    # Sequence-model (TCN) diversity (notes/27): a learned holistic reading, blended 0.1 into the correction
+    if gbm.get("tcn") is not None:
+        try:
+            Xh = np.nan_to_num(f["X"][:, :-_TCN_DROP], nan=0.0, posinf=0.0, neginf=0.0)
+            with _TABICL_LOCK:
+                tcn_resid = _predict_tcn(gbm["tcn"], Xh)
+            pred = 0.9 * pred + 0.1 * tcn_resid
+        except Exception as e:
+            print("TCN predict skip:", repr(e)[:120])
     gbmA = f["anchor"] + pred
     out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]
     return out
