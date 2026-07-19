@@ -677,12 +677,13 @@ def _resample_seq(A, S):
 
 if _HAS_TORCH:
     class _TCN(_tnn.Module):
-        def __init__(self, F, ch=48):
+        def __init__(self, F, ch=64):          # strengthened (notes/27): ch 48->64, +dilation-16 block
             super().__init__()
             def blk(i, o, d):
                 return _tnn.Sequential(_tnn.Conv1d(i, o, 5, padding=2 * d, dilation=d),
                                        _tnn.ReLU(), _tnn.BatchNorm1d(o))
-            self.net = _tnn.Sequential(blk(F, ch, 1), blk(ch, ch, 2), blk(ch, ch, 4), blk(ch, ch, 8))
+            self.net = _tnn.Sequential(blk(F, ch, 1), blk(ch, ch, 2), blk(ch, ch, 4),
+                                       blk(ch, ch, 8), blk(ch, ch, 16))
             self.head = _tnn.Conv1d(ch, 1, 1)
         def forward(self, x):                       # x: (N, S, F)
             return self.head(self.net(x.transpose(1, 2))).squeeze(1)
@@ -743,7 +744,7 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     tcn = None
     if _HAS_TORCH:
         try:
-            tcn = _train_tcn([p[3] for p in parts], [p[4] for p in parts], n_seed=3)
+            tcn = _train_tcn([p[3] for p in parts], [p[4] for p in parts], n_seed=5)
             print(f"TCN trained on {len(parts)} well sequences ({parts[0][3].shape[1]} channels)")
         except Exception as e:
             print("TCN train FAILED:", repr(e)[:200]); tcn = None
@@ -822,7 +823,7 @@ def gbm_stack(well, level_model, gbm, blend=0.75):
             Xh = np.nan_to_num(f["X"][:, :-_TCN_DROP], nan=0.0, posinf=0.0, neginf=0.0)
             with _TABICL_LOCK:
                 tcn_resid = _predict_tcn(gbm["tcn"], Xh)
-            pred = 0.8 * pred + 0.2 * tcn_resid   # 0.1->0.2: CV understated the TCN 5x, tune weight on public (notes/27)
+            pred = 0.7 * pred + 0.3 * tcn_resid   # 0.2->0.3 + stronger TCN: CV understated the TCN 5x, tune weight on public (notes/27)
         except Exception as e:
             print("TCN predict skip:", repr(e)[:120])
     gbmA = f["anchor"] + pred
