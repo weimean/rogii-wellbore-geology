@@ -766,11 +766,11 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
             print(f"TCN trained on {len(parts)} well sequences ({parts[0][3].shape[1]} channels)")
         except Exception as e:
             print("TCN train FAILED:", repr(e)[:200]); tcn = None
-        try:   # transformer: different function class, may decorrelate from the TCN (notes/27)
-            tfm = _train_seq(_sq, _tg, arch="tfm", n_seed=2, epochs=40, lr=1e-3)
-            print(f"TFM (transformer) trained on {len(parts)} well sequences")
-        except Exception as e:
-            print("TFM train FAILED (falling back to TCN-only):", repr(e)[:200]); tfm = None
+        # TRANSFORMER TESTED & REJECTED (notes/27): ensembling a TFM with the TCN (0.65/0.35) scored
+        # public 10.726 vs TCN-only 10.699 (+0.027) — self-attention RESTATES the TCN's holistic
+        # reading rather than decorrelating from it (same outcome as beam-DP vs our HMM). _TFM class
+        # kept for reference; not trained (also saves ~30min runtime).
+        tfm = None
 
     def _fit_lgb(sd):  # GPU LightGBM with CPU fallback (Kaggle build may lack GPU)
         try:
@@ -845,9 +845,7 @@ def gbm_stack(well, level_model, gbm, blend=0.75):
         try:
             Xh = np.nan_to_num(f["X"][:, :-_TCN_DROP], nan=0.0, posinf=0.0, neginf=0.0)
             with _TABICL_LOCK:
-                seq_resid = _predict_seq(gbm["tcn"], Xh)
-                if gbm.get("tfm") is not None:   # ensemble TCN + transformer (notes/27); TFM weighted
-                    seq_resid = 0.65 * seq_resid + 0.35 * _predict_seq(gbm["tfm"], Xh)   # conservatively
+                seq_resid = _predict_seq(gbm["tcn"], Xh)   # TCN only (TFM ensemble rejected, notes/27)
             pred = 0.7 * pred + 0.3 * seq_resid   # seq-model weight 0.3 (tuned on public; CV understates 5x)
         except Exception as e:
             print("TCN predict skip:", repr(e)[:120])

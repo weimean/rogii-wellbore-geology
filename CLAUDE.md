@@ -70,8 +70,10 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | **+ TCN blend 0.1→0.2** | — | **10.760** | CV-chosen weight was too low; public −0.092; kernel v26; notes/27 |
 | **+ stronger TCN (5blk/ch64/5seed) + blend 0.3 (BEST)** | −0.081 | **10.699** | stronger net doubled CV signal (−0.034→−0.081); public −0.061; gains DIMINISHING (−0.168→−0.092→−0.061); kernel v27; notes/27 |
 
+| ~~+ transformer ensembled w/ TCN (0.65/0.35)~~ (REVERTED) | — | 10.726 | self-attention RESTATES the TCN's holistic reading (like beam-DP vs HMM); +0.027; kernel v28; notes/27 |
+
 - **Current best = kernel v27** (`gtwm98/rogii-hmm-fusion`, ref 54832887 (BEST), stronger TCN + blend 0.3,
-  public **10.699**). Sequence-model vein still positive but SATURATING (−0.168→−0.092→−0.061 per step).
+  public **10.699**). Sequence-model vein now SATURATED/CLOSED (−0.168→−0.092→−0.061→+0.027 transformer REJECTED).
   ffill 15.9 → 10.699 (−5.21 total). Recipe below (was v25): seed-ensembled LGB+Cat
   (3 seeds, step=5) ⊕ PF ⊕ lik-PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP** ⊕ **crude spatial** ⊕
   **rich formation-PLANE features** (FormationPlaneKNN + dense ANCC) ⊕ **TabICL foundation model** (BSD-3, offline) ⊕

@@ -42,6 +42,23 @@ by the full train set. **So the "honest ceiling" at 11.020 was ARCHITECTURE-POVE
 every prior model predicted rows independently; the holistic sequential reading was the missing lever. (Same
 mistake shape as the 13.52 "ceiling" = feature-poverty.)
 
-**NEXT (headroom): the blend weight 0.1 was chosen by the UNDERSTATING CV → probably too low.** Since CV
-understates this lever, tune the blend on PUBLIC: try w=0.2, 0.3. Also worth: a stronger TCN (more channels
-incl. per-well trajectory raw, bigger/deeper, or a small transformer), more seeds. This is now the hot lever.
+## Tuning the lever on PUBLIC (CV can't be trusted — it understates 5×)
+| step | change | public | delta |
+|---|---|---|---|
+| v25 | TCN, blend 0.1 | 10.852 | −0.168 |
+| v26 | blend 0.1→0.2 | **10.760** | −0.092 |
+| v27 | stronger TCN (5blk/ch64/5seed) + blend 0.3 | **10.699** | −0.061 |
+| v28 | + transformer ensembled (0.65 TCN / 0.35 TFM) | 10.726 | **+0.027 REVERTED** |
+
+**Stronger TCN worked** (CV signal −0.034→−0.081 with 5 blocks/ch64/5 seeds; public −0.061 with blend 0.3).
+**Transformer REJECTED (v28).** A 3-layer/4-head/d64 TFM encoder trained fine on Kaggle (no fallback) but
+ensembling it with the TCN scored 10.726 vs TCN-only 10.699. Self-attention's GLOBAL receptive field
+**RESTATES** the TCN's holistic reading rather than decorrelating from it — the same outcome as beam-DP vs
+our HMM (corr 0.9997). Averaging in a correlated, slightly weaker model just dilutes. Damage was small
+(+0.027) exactly because ensembling two sequence models is near-neutral when redundant. `_TFM` class kept in
+the kernel for reference but NOT trained (also saves ~30min runtime).
+
+**LEVER SATURATED: −0.168 → −0.092 → −0.061 → +0.027.** The sequence-model vein is now closed at
+**v27/10.699**. Within sequence models, the TCN already captures the holistic reading; a different sequence
+architecture is a restatement, not new signal. (Remaining untried, unvalidated: feeding RAW GR sequences so
+the model learns its own correlation from scratch — but the local cache rig would need a ~2h rebuild first.)
