@@ -67,11 +67,12 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | ~~+ fusion-weight cut (blend 0.75→0.90)~~ (REVERTED) | 10.80 | 11.072 | −0.10 grouped CV but +0.03 public (CV-overfit blend); reverted; kernel v19; notes/15 |
 | **+ TabICL foundation model** | — | **11.020** | offline TabICLv2 regressor blended 0.35 (diff function class, like MLP); −0.022; kernel v20; notes/17 |
 | **+ TCN sequence model (BREAKTHROUGH)** | −0.034 | **10.852** | learned HOLISTIC GR reading (dilated temporal conv over the eval sequence); blend 0.1; grouped CV UNDERSTATED it 5× (−0.034 CV → **−0.168 public**), like spatial; kernel v25; notes/27 |
-| **+ TCN blend 0.1→0.2 (BEST)** | — | **10.760** | CV-chosen weight was too low (CV understates the lever); public −0.092; weight STILL climbing; kernel v26; notes/27 |
+| **+ TCN blend 0.1→0.2** | — | **10.760** | CV-chosen weight was too low; public −0.092; kernel v26; notes/27 |
+| **+ stronger TCN (5blk/ch64/5seed) + blend 0.3 (BEST)** | −0.081 | **10.699** | stronger net doubled CV signal (−0.034→−0.081); public −0.061; gains DIMINISHING (−0.168→−0.092→−0.061); kernel v27; notes/27 |
 
-- **Current best = kernel v26** (`gtwm98/rogii-hmm-fusion`, ref 54828957 (BEST), TCN blend 0.2, public **10.760**).
-  Weight still climbing (0.1→0.2 gave −0.092) → probe 0.3 next; then strengthen the TCN. Recipe below (was v25):
-  seed-ensembled LGB+Cat
+- **Current best = kernel v27** (`gtwm98/rogii-hmm-fusion`, ref 54832887 (BEST), stronger TCN + blend 0.3,
+  public **10.699**). Sequence-model vein still positive but SATURATING (−0.168→−0.092→−0.061 per step).
+  ffill 15.9 → 10.699 (−5.21 total). Recipe below (was v25): seed-ensembled LGB+Cat
   (3 seeds, step=5) ⊕ PF ⊕ lik-PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP** ⊕ **crude spatial** ⊕
   **rich formation-PLANE features** (FormationPlaneKNN + dense ANCC) ⊕ **TabICL foundation model** (BSD-3, offline) ⊕
   **TCN sequence model** (learned holistic GR reading, torch, offline, 91 honest per-well channels),
