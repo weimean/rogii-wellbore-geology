@@ -688,19 +688,36 @@ if _HAS_TORCH:
         def forward(self, x):                       # x: (N, S, F)
             return self.head(self.net(x.transpose(1, 2))).squeeze(1)
 
+    class _TFM(_tnn.Module):
+        """Transformer encoder over the eval sequence (notes/27): self-attention gives a GLOBAL
+        receptive field (any stage attends to any other), unlike the TCN's fixed dilated window —
+        a different function class that may DECORRELATE from the TCN rather than restate it."""
+        def __init__(self, F, d=64, nhead=4, nlayers=3, S=_TCN_S):
+            super().__init__()
+            self.inp = _tnn.Linear(F, d)
+            self.pos = _tnn.Parameter(_torch.randn(1, S, d) * 0.02)
+            layer = _tnn.TransformerEncoderLayer(d_model=d, nhead=nhead, dim_feedforward=2 * d,
+                                                 dropout=0.1, batch_first=True, norm_first=True)
+            self.enc = _tnn.TransformerEncoder(layer, nlayers)
+            self.head = _tnn.Linear(d, 1)
+        def forward(self, x):                       # x: (N, S, F)
+            return self.head(self.enc(self.inp(x) + self.pos)).squeeze(-1)
 
-def _train_tcn(seqs, targs, n_seed=3):
+
+def _train_seq(seqs, targs, arch="tcn", n_seed=5, epochs=60, lr=3e-3):
+    """Train a seed-ensembled sequence model (arch: 'tcn' | 'tfm') on per-well residual sequences."""
     X = np.stack(seqs); Y = np.stack(targs)          # (W,S,F), (W,S)
     mu = X.reshape(-1, X.shape[2]).mean(0); sd = X.reshape(-1, X.shape[2]).std(0) + 1e-6
     Xn = ((X - mu) / sd).astype(np.float32); ys = float(Y.std() + 1e-6)
     models = []
     for seed in range(n_seed):
         _torch.manual_seed(seed)
-        net = _TCN(X.shape[2]); opt = _torch.optim.Adam(net.parameters(), lr=3e-3, weight_decay=1e-4)
+        net = _TFM(X.shape[2]) if arch == "tfm" else _TCN(X.shape[2])
+        opt = _torch.optim.Adam(net.parameters(), lr=lr, weight_decay=1e-4)
         lossf = _tnn.SmoothL1Loss()
         Xt = _torch.tensor(Xn); Yt = _torch.tensor((Y / ys).astype(np.float32))
         net.train(); idx = np.arange(len(X)); bs = 64
-        for ep in range(60):
+        for ep in range(epochs):
             np.random.RandomState(ep + 100 * seed).shuffle(idx)
             for b in range(0, len(idx), bs):
                 bi = idx[b:b + bs].tolist()
@@ -709,12 +726,12 @@ def _train_tcn(seqs, targs, n_seed=3):
     return {"models": models, "mu": mu, "sd": sd, "ys": ys}
 
 
-def _predict_tcn(tcn, Xfull):
+def _predict_seq(m, Xfull):
     """Xfull: (n, F) honest channels -> (n,) residual prediction (seed-averaged, interpolated back)."""
     n = len(Xfull); seq = _resample_seq(Xfull, _TCN_S)
-    Xn = ((seq - tcn["mu"]) / tcn["sd"]).astype(np.float32)
+    Xn = ((seq - m["mu"]) / m["sd"]).astype(np.float32)
     with _torch.no_grad():
-        p = np.mean([m(_torch.tensor(Xn[None])).numpy()[0] for m in tcn["models"]], 0) * tcn["ys"]
+        p = np.mean([mm(_torch.tensor(Xn[None])).numpy()[0] for mm in m["models"]], 0) * m["ys"]
     ef = np.linspace(0, 1, n); grid = np.linspace(0, 1, _TCN_S)
     return np.interp(ef, grid, p)
 
@@ -741,13 +758,19 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
     parts = [r for r in Parallel(n_jobs=-1, prefer="threads")(delayed(_feat)(w) for w in train_wells) if r is not None]
     X = np.vstack([p[0] for p in parts]); y = np.concatenate([p[1] for p in parts]); dis = [p[2] for p in parts]
     # Sequence model (TCN): learned holistic reading (notes/27), trained on honest per-well sequences.
-    tcn = None
+    tcn = tfm = None
     if _HAS_TORCH:
+        _sq = [p[3] for p in parts]; _tg = [p[4] for p in parts]
         try:
-            tcn = _train_tcn([p[3] for p in parts], [p[4] for p in parts], n_seed=5)
+            tcn = _train_seq(_sq, _tg, arch="tcn", n_seed=5, epochs=60, lr=3e-3)
             print(f"TCN trained on {len(parts)} well sequences ({parts[0][3].shape[1]} channels)")
         except Exception as e:
             print("TCN train FAILED:", repr(e)[:200]); tcn = None
+        try:   # transformer: different function class, may decorrelate from the TCN (notes/27)
+            tfm = _train_seq(_sq, _tg, arch="tfm", n_seed=2, epochs=40, lr=1e-3)
+            print(f"TFM (transformer) trained on {len(parts)} well sequences")
+        except Exception as e:
+            print("TFM train FAILED (falling back to TCN-only):", repr(e)[:200]); tfm = None
 
     def _fit_lgb(sd):  # GPU LightGBM with CPU fallback (Kaggle build may lack GPU)
         try:
@@ -790,7 +813,7 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
         except Exception as e:
             print("TabICL fit FAILED:", repr(e)[:200]); tabicl = None
     return {"models": models, "mlps": mlps, "scaler": scaler, "spatial_ref": spatial_ref, "formation_ref": formation_ref,
-            "tabicl": tabicl, "tcn": tcn, "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
+            "tabicl": tabicl, "tcn": tcn, "tfm": tfm, "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
 
 
 def gbm_stack(well, level_model, gbm, blend=0.75):
@@ -822,8 +845,10 @@ def gbm_stack(well, level_model, gbm, blend=0.75):
         try:
             Xh = np.nan_to_num(f["X"][:, :-_TCN_DROP], nan=0.0, posinf=0.0, neginf=0.0)
             with _TABICL_LOCK:
-                tcn_resid = _predict_tcn(gbm["tcn"], Xh)
-            pred = 0.7 * pred + 0.3 * tcn_resid   # 0.2->0.3 + stronger TCN: CV understated the TCN 5x, tune weight on public (notes/27)
+                seq_resid = _predict_seq(gbm["tcn"], Xh)
+                if gbm.get("tfm") is not None:   # ensemble TCN + transformer (notes/27); TFM weighted
+                    seq_resid = 0.65 * seq_resid + 0.35 * _predict_seq(gbm["tfm"], Xh)   # conservatively
+            pred = 0.7 * pred + 0.3 * seq_resid   # seq-model weight 0.3 (tuned on public; CV understates 5x)
         except Exception as e:
             print("TCN predict skip:", repr(e)[:120])
     gbmA = f["anchor"] + pred
