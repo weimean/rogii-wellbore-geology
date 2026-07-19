@@ -822,7 +822,7 @@ def gbm_stack(well, level_model, gbm, blend=0.75):
             Xh = np.nan_to_num(f["X"][:, :-_TCN_DROP], nan=0.0, posinf=0.0, neginf=0.0)
             with _TABICL_LOCK:
                 tcn_resid = _predict_tcn(gbm["tcn"], Xh)
-            pred = 0.9 * pred + 0.1 * tcn_resid
+            pred = 0.8 * pred + 0.2 * tcn_resid   # 0.1->0.2: CV understated the TCN 5x, tune weight on public (notes/27)
         except Exception as e:
             print("TCN predict skip:", repr(e)[:120])
     gbmA = f["anchor"] + pred
