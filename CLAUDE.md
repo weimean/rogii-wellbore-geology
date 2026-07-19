@@ -68,8 +68,7 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
 | **+ TabICL foundation model** | — | **11.020** | offline TabICLv2 regressor blended 0.35 (diff function class, like MLP); −0.022; kernel v20; notes/17 |
 | **+ TCN sequence model (BREAKTHROUGH)** | −0.034 | **10.852** | learned HOLISTIC GR reading (dilated temporal conv over the eval sequence); blend 0.1; grouped CV UNDERSTATED it 5× (−0.034 CV → **−0.168 public**), like spatial; kernel v25; notes/27 |
 | **+ TCN blend 0.1→0.2** | — | **10.760** | CV-chosen weight was too low; public −0.092; kernel v26; notes/27 |
-| **+ stronger TCN (5blk/ch64/5seed) + blend 0.3 (BEST)** | −0.081 | **10.699** | stronger net doubled CV signal (−0.034→−0.081); public −0.061; gains DIMINISHING (−0.168→−0.092→−0.061); kernel v27; notes/27 |
-
+| **+ stronger TCN (5blk/ch64/5seed) + blend 0.3 (BEST)** | −0.081 | **10.699** | stronger net doubled CV signal (−0.034→−0.081); public −0.061; kernel v27; notes/27 |
 | ~~+ transformer ensembled w/ TCN (0.65/0.35)~~ (REVERTED) | — | 10.726 | self-attention RESTATES the TCN's holistic reading (like beam-DP vs HMM); +0.027; kernel v28; notes/27 |
 
 - **Current best = kernel v27** (`gtwm98/rogii-hmm-fusion`, ref 54832887 (BEST), stronger TCN + blend 0.3,
@@ -78,8 +77,8 @@ data/raw/      train/ (773 wells × 3 files each) · test/ (3 example wells)
   (3 seeds, step=5) ⊕ PF ⊕ lik-PF ⊕ A+B ⊕ **rich multi-offset GR-match features** ⊕ **MLP** ⊕ **crude spatial** ⊕
   **rich formation-PLANE features** (FormationPlaneKNN + dense ANCC) ⊕ **TabICL foundation model** (BSD-3, offline) ⊕
   **TCN sequence model** (learned holistic GR reading, torch, offline, 91 honest per-well channels),
-  correction = [0.65·(0.7·GBM+0.3·MLP)+0.35·TabICL] then 0.9·(that)+0.1·TCN, final blend 0.75. **Public 10.852**
-  — from ffill 15.9 (−5.06 total; −0.17 from v20). **Fully honest & rules-compliant.** Full ledger: notes/CONCLUSION.md.
+  correction = [0.65·(0.7·GBM+0.3·MLP)+0.35·TabICL] then 0.7·(that)+0.3·TCN, final blend 0.75. **Public 10.699**
+  — from ffill 15.9 (−5.21 total; −0.32 from v20). **Fully honest & rules-compliant.** Full ledger: notes/CONCLUSION.md.
 - 🚀 **THE "HONEST CEILING" WAS FALSE — the TCN sequence model broke it (2026-07-19, notes/27).** After 7 levers
   closed (notes/20-26) I concluded 11.020 was the honest ceiling. WRONG. The gap was ARCHITECTURAL: every model
   predicted each row INDEPENDENTLY; a TCN reading the whole well as a SEQUENCE (the learned analogue of a
