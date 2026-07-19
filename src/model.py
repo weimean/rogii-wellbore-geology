@@ -861,8 +861,11 @@ def _adaptive_w(mean_dis, gbm, w0=0.70, slope=0.05, lo=0.55, hi=1.0):
 
 
 def gbm_stack(well: Well, level_model, gbm, blend: float = 0.75) -> np.ndarray:
-    """Blend the seed-ensembled (LightGBM+CatBoost)-corrected anchor with the variance fusion,
-    using a per-well ADAPTIVE blend (less fusion where HMM/PF disagree). Our best model."""
+    """Blend the seed-ensembled (LightGBM+CatBoost)-corrected anchor with the variance fusion.
+    NOTE: this is the CANONICAL local model. The production kernel additionally blends two offline
+    diversity layers not runnable locally (Kaggle-only): TabICL (foundation model, notes/17) and a
+    TCN sequence model (learned holistic GR reading, notes/27, validated via tools/seq_model_probe.py).
+    Both are different function classes; kernel correction = ...⊕0.35·TabICL then 0.9·(that)+0.1·TCN."""
     f = _stack_features(well, level_model, spatial_ref=gbm.get("spatial_ref"),
                         formation_ref=gbm.get("formation_ref"))
     out = baseline_ffill(well.horizontal).astype(float)
