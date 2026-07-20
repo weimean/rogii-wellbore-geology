@@ -62,3 +62,23 @@ the kernel for reference but NOT trained (also saves ~30min runtime).
 **v27/10.699**. Within sequence models, the TCN already captures the holistic reading; a different sequence
 architecture is a restatement, not new signal. (Remaining untried, unvalidated: feeding RAW GR sequences so
 the model learns its own correlation from scratch — but the local cache rig would need a ~2h rebuild first.)
+
+## TCN config sweep — NULL RESULT (2026-07-21), do not re-run
+Clean, contention-free grouped-CV sweep (sequential, pinned 8 threads, 5 seeds each; baseline 10.8775).
+Ran the SAME config twice (A1, A2) to establish the error bar:
+
+| variant | best OOF @ w=0.2 | vs A1 |
+|---|---|---|
+| A1 ch64 (v27 cfg) | 10.8164 | — |
+| **A2 ch64 (same cfg, diff seeds)** | **10.7648** | **−0.052 (this IS the error bar)** |
+| B ch96 (wider) | 10.8084 | −0.008 |
+| C prefix-crop aug | 10.8293 | +0.013 |
+| D input noise | 10.7886 | −0.028 |
+
+**The A1–A2 spread (0.052) exceeds every variant's deviation from A1.** ch96/crop/noise are all
+indistinguishable from the v27 config — B sits between A1 and A2; D (−0.028) is smaller than the seed
+noise and worse than A2 (baseline cfg, lucky seed). NO variant beats v27 config by more than measurement
+error, and 0.052 seed variance > the ~0.03 public noise floor anyway → nothing here is submittable.
+**Confirms the sequence-model lever is at its ceiling at the v27 config.** (Also explains the earlier
+contaminated sweep's flipping rankings: ~0.05 seed variance, not just CPU contention.) Rig now persists in
+~/rogii_cache (survives /tmp wipes) + _cache_meta_oof.py scripts the lost cache — reproducible if ever needed.
