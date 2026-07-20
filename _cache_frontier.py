@@ -8,12 +8,15 @@ import numpy as np
 from pathlib import Path
 from scipy.ndimage import gaussian_filter1d
 from src.data import load_split, TARGET_INPUT
+import os as _os
+_ROGII_CACHE = _os.environ.get("ROGII_CACHE", _os.path.expanduser("~/rogii_cache"))
+_os.makedirs(_ROGII_CACHE, exist_ok=True)
 
 t0 = time.time()
 def log(m): print(f"[{time.time()-t0:5.0f}s] {m}", flush=True)
 
 # HMM predictions per row (for the NCC-quality alignment), from the base cache
-D = np.load("/tmp/rogii_feats.npz")
+D = np.load(f"{_ROGII_CACHE}/rogii_feats.npz")
 HMM = D["hmm_pred"]; GID = D["gidx"]
 
 wells = load_split(Path("data/raw/train"))
@@ -64,5 +67,5 @@ for gi, wl in enumerate(wells):
 
 out = {k: np.concatenate(v) for k, v in rows.items()}
 assert len(out["gmax51"]) == len(HMM), f"misalign {len(out['gmax51'])} vs {len(HMM)}"
-np.savez_compressed("/tmp/rogii_frontier.npz", **out)
+np.savez_compressed(f"{_ROGII_CACHE}/rogii_frontier.npz", **out)
 log(f"saved /tmp/rogii_frontier.npz, rows: {len(out['gmax51'])}")

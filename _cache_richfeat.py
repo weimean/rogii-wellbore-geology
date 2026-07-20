@@ -11,11 +11,14 @@ import numpy as np, pandas as pd
 from pathlib import Path
 from scipy.ndimage import gaussian_filter1d
 from src.data import load_split, TARGET_INPUT
+import os as _os
+_ROGII_CACHE = _os.environ.get("ROGII_CACHE", _os.path.expanduser("~/rogii_cache"))
+_os.makedirs(_ROGII_CACHE, exist_ok=True)
 
 t0 = time.time()
 def log(m): print(f"[{time.time()-t0:5.0f}s] {m}", flush=True)
 
-D = np.load("/tmp/rogii_feats.npz"); PF = np.load("/tmp/rogii_pf.npz")
+D = np.load(f"{_ROGII_CACHE}/rogii_feats.npz"); PF = np.load(f"{_ROGII_CACHE}/rogii_pf.npz")
 HMM = D["hmm_pred"]; PFp = PF["pf_pred"]; GID = D["gidx"]
 ANCH_OFFS = [-80, -40, -20, -10, -5, 0, 5, 10, 20, 40, 80]
 PF_OFFS = [-30, -15, -8, -4, -2, 0, 2, 4, 8, 15, 30]
@@ -61,5 +64,5 @@ for w in wells:
 
 res = {k: np.concatenate(v) for k, v in out.items()}
 assert len(next(iter(res.values()))) == len(HMM), "misalign"
-np.savez_compressed("/tmp/rogii_rich.npz", **res)
+np.savez_compressed(f"{_ROGII_CACHE}/rogii_rich.npz", **res)
 log(f"saved /tmp/rogii_rich.npz: {len(res)} features, {len(HMM)} rows")

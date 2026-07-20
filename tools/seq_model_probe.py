@@ -15,6 +15,9 @@ import torch, torch.nn as nn
 import torch.nn.functional as Fnn
 from sklearn.model_selection import GroupKFold
 from src.validation import score
+import os as _os
+_ROGII_CACHE = _os.environ.get("ROGII_CACHE", _os.path.expanduser("~/rogii_cache"))
+_os.makedirs(_ROGII_CACHE, exist_ok=True)
 
 
 def _crop_batch(xb, yb, rng, S):
@@ -39,7 +42,7 @@ S = 256  # resample each well's eval zone to S stages
 
 
 def build():
-    d = np.load("/tmp/rogii_meta_oof.npz")
+    d = np.load(f"{_ROGII_CACHE}/rogii_meta_oof.npz")
     truth, anchor, fusion, g = d["truth"], d["anchor"], d["fusion"], d["g"]
     gbm, mlp, hmm, pf, mds = d["oof_gbm"], d["oof_mlp"], d["hmm"], d["pf"], d["md_since"]
     uniq, first = np.unique(g, return_index=True); counts = np.diff(np.append(first, len(g)))
@@ -49,7 +52,7 @@ def build():
     else:
         cols = [hmm - anchor, pf - anchor, gbm, mlp, fusion - anchor, mds / 5000.0]
     if os.environ.get("SEQ_RICH") == "1":
-        r = np.load("/tmp/rogii_rich.npz")
+        r = np.load(f"{_ROGII_CACHE}/rogii_rich.npz")
         for k in r.files:                       # raw GR-vs-typewell correlation surface (the "reading")
             v = np.nan_to_num(r[k].astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
             cols.append(v)

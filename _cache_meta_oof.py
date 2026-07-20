@@ -17,6 +17,9 @@ from sklearn.neural_network import MLPRegressor
 import lightgbm as lgb
 from catboost import CatBoostRegressor
 from tools.frontier_fast import load_stack, train_submask
+import os as _os
+_ROGII_CACHE = _os.environ.get("ROGII_CACHE", _os.path.expanduser("~/rogii_cache"))
+_os.makedirs(_ROGII_CACHE, exist_ok=True)
 
 t0 = time.time()
 def log(m): print(f"[{time.time()-t0:6.1f}s] {m}", flush=True)
@@ -27,9 +30,9 @@ def main():
     X0, truth, anchor, fusion, g = s["X"], s["truth"], s["anchor"], s["fusion"], s["g"]
     first, counts = s["first"], s["counts"]
     y = truth - anchor
-    r = np.load("/tmp/rogii_rich.npz")
+    r = np.load(f"{_ROGII_CACHE}/rogii_rich.npz")
     Xr = np.nan_to_num(np.column_stack([X0] + [r[k] for k in r.files]), nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
-    fo = np.load("/tmp/rogii_formation.npz")
+    fo = np.load(f"{_ROGII_CACHE}/rogii_formation.npz")
     fcols = []
     for k in fo.files:
         v = fo[k].astype(np.float32)
@@ -60,15 +63,15 @@ def main():
         oof_mlp[va] = np.mean([m.predict(sc.transform(X[va])) for m in mlps], 0)
         log(f"fold {fold} done")
 
-    d = np.load("/tmp/rogii_feats.npz"); pf = np.load("/tmp/rogii_pf.npz")
+    d = np.load(f"{_ROGII_CACHE}/rogii_feats.npz"); pf = np.load(f"{_ROGII_CACHE}/rogii_pf.npz")
     out = dict(truth=truth, anchor=anchor, fusion=fusion, g=g,
                oof_gbm=oof_gbm.astype(np.float32), oof_mlp=oof_mlp.astype(np.float32),
                hmm=d["hmm_pred"].astype(np.float32), pf=pf["pf_pred"].astype(np.float32),
                md_since=d["md_from_ps"].astype(np.float32))
-    np.savez_compressed("/tmp/rogii_meta_oof.npz", **out)
+    np.savez_compressed(f"{_ROGII_CACHE}/rogii_meta_oof.npz", **out)
     from src.validation import score
     pred = 0.75 * (anchor + 0.7 * oof_gbm + 0.3 * oof_mlp) + 0.25 * fusion
-    log(f"saved /tmp/rogii_meta_oof.npz | baseline pooled OOF = {score(truth, pred):.4f} (expect ~10.90)")
+    log(f"saved {_ROGII_CACHE}/rogii_meta_oof.npz | baseline pooled OOF = {score(truth, pred):.4f} (expect ~10.90)")
 
 
 if __name__ == "__main__":

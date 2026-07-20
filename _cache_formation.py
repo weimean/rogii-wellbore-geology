@@ -14,6 +14,9 @@ from pathlib import Path
 from scipy.spatial import cKDTree
 from src.data import load_split
 from src.model import _stack_features
+import os as _os
+_ROGII_CACHE = _os.environ.get("ROGII_CACHE", _os.path.expanduser("~/rogii_cache"))
+_os.makedirs(_ROGII_CACHE, exist_ok=True)
 
 t0 = time.time()
 def log(m): print(f"[{time.time()-t0:5.0f}s] {m}", flush=True)
@@ -145,9 +148,9 @@ def main():
         if (k + 1) % 150 == 0:
             log(f"  {k+1}/{len(wells)} ({gi} kept)")
     out = {kk: np.concatenate(v) for kk, v in out.items()}
-    ref = np.load("/tmp/rogii_feats.npz")["truth"]
+    ref = np.load(f"{_ROGII_CACHE}/rogii_feats.npz")["truth"]
     assert len(out["tvtF_ANCC"]) == len(ref), f"align mismatch {len(out['tvtF_ANCC'])} vs {len(ref)}"
-    np.savez_compressed("/tmp/rogii_formation.npz", **out)
+    np.savez_compressed(f"{_ROGII_CACHE}/rogii_formation.npz", **out)
     log(f"saved {len(out['tvtF_ANCC'])} rows, {len(names)} feats -> /tmp/rogii_formation.npz")
 
 

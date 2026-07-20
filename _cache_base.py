@@ -14,6 +14,9 @@ import numpy as np
 from pathlib import Path
 from src.data import load_split, TARGET_INPUT
 from src.model import _stack_features, STACK_FEATS
+import os as _os
+_ROGII_CACHE = _os.environ.get("ROGII_CACHE", _os.path.expanduser("~/rogii_cache"))
+_os.makedirs(_ROGII_CACHE, exist_ok=True)
 
 t0 = time.time()
 def log(m): print(f"[{time.time()-t0:5.0f}s] {m}", flush=True)
@@ -53,6 +56,6 @@ for k, w in enumerate(wells):
 feats = {k: np.concatenate(v) for k, v in feats.items()}
 pf = {k: np.concatenate(v) for k, v in pf.items()}
 assert len(feats["truth"]) == len(pf["pf_pred"])
-np.savez_compressed("/tmp/rogii_feats.npz", **feats)
-np.savez_compressed("/tmp/rogii_pf.npz", **pf)
+np.savez_compressed(f"{_ROGII_CACHE}/rogii_feats.npz", **feats)
+np.savez_compressed(f"{_ROGII_CACHE}/rogii_pf.npz", **pf)
 log(f"saved: {len(feats['truth'])} rows, {gi} wells → /tmp/rogii_feats.npz + /tmp/rogii_pf.npz")

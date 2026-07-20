@@ -13,12 +13,15 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 from sklearn.model_selection import GroupKFold, KFold
 from sklearn.linear_model import Ridge
+import os as _os
+_ROGII_CACHE = _os.environ.get("ROGII_CACHE", _os.path.expanduser("~/rogii_cache"))
+_os.makedirs(_ROGII_CACHE, exist_ok=True)
 
 STACK_FEATS = ["hmm_pred", "hmm_std", "z_from_ps", "md_from_ps", "horiz_from_ps", "dz",
                "tort", "gr50", "gr_dev", "az_sin", "az_cos", "eval_frac",
                "v50", "v200", "gr_off", "known_range", "eval_len"]
 LVL = ["v50", "v200", "gr_off", "eval_len", "known_range"]
-CACHE = "/tmp/rogii_stackX.npz"
+CACHE = f"{_ROGII_CACHE}/rogii_stackX.npz"
 
 
 def load_stack(rebuild=False):
@@ -26,8 +29,8 @@ def load_stack(rebuild=False):
     if os.path.exists(CACHE) and not rebuild:
         z = np.load(CACHE)
         return {k: z[k] for k in z.files}
-    d = np.load("/tmp/rogii_feats.npz"); pf = np.load("/tmp/rogii_pf.npz")
-    fr = np.load("/tmp/rogii_frontier.npz")
+    d = np.load(f"{_ROGII_CACHE}/rogii_feats.npz"); pf = np.load(f"{_ROGII_CACHE}/rogii_pf.npz")
+    fr = np.load(f"{_ROGII_CACHE}/rogii_frontier.npz")
     g = d["gidx"]
     assert np.all(np.diff(g) >= 0), "cache rows must be grouped/sorted by well"
     truth, last = d["truth"], d["last_tvt"]
