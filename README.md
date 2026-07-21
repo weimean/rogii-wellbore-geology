@@ -1,5 +1,13 @@
 # ROGII — Wellbore Geology Prediction
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](pyproject.toml)
+[![PyTorch](https://img.shields.io/badge/PyTorch-TCN-EE4C2C?logo=pytorch&logoColor=white)](#approach--anchor-then-residual-ensemble)
+[![LightGBM](https://img.shields.io/badge/LightGBM-%2B_CatBoost-2C7BB6)](#approach--anchor-then-residual-ensemble)
+[![Kaggle](https://img.shields.io/badge/Kaggle-Code_Competition-20BEFF?logo=kaggle&logoColor=white)](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction)
+[![Result](https://img.shields.io/badge/public_RMSE-10.70-success)](#result)
+[![Improvement](https://img.shields.io/badge/vs_baseline-−33%25-brightgreen)](#result)
+
 > Predicting **True Vertical Thickness (TVT)** along the un-logged section of horizontal oil wells by
 > correlating gamma-ray logs — a sequence-alignment problem tackled with an anchor-then-residual ensemble
 > that ends in a **learned "holistic reading"** of the log.
