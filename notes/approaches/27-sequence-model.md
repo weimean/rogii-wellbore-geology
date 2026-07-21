@@ -82,3 +82,23 @@ error, and 0.052 seed variance > the ~0.03 public noise floor anyway → nothing
 **Confirms the sequence-model lever is at its ceiling at the v27 config.** (Also explains the earlier
 contaminated sweep's flipping rankings: ~0.05 seed variance, not just CPU contention.) Rig now persists in
 ~/rogii_cache (survives /tmp wipes) + _cache_meta_oof.py scripts the lost cache — reproducible if ever needed.
+
+## 'Last breath' — RAW-GR sequences NULL (2026-07-21), lever fully closed
+Hypothesis: our rich features (hgr − tw_gr(HMM+off) at 11 offsets) are a lossy reduction; a from-scratch
+model given the un-reduced surface (41 fine offsets + 21 raw typewell-reference + 3 raw-GR scales = 65
+channels, `_cache_rawgr.py`) might learn a better correlation. Clean sweep (5 seeds, pinned threads,
+baseline 10.8775), REF run twice for the error bar:
+
+| config | best OOF @ w=0.2 | verdict |
+|---|---|---|
+| REF_rich | 10.8164 | reference |
+| REF_rich (repeat) | 10.7648 | **error bar = 0.052** |
+| RAW_only (65 raw ch, no rich) | 10.8451 | WORSE than both REF |
+| RICH+RAW | 10.7997 | inside the REF band (null) |
+
+**REFUTED.** RAW_only is *worse* than the rich reference; RICH+RAW sits between the two REF runs → no signal
+beyond seed noise. Our hand-engineered 11-offset reduction is NOT a bottleneck — it's better-conditioned than
+the raw surface, which just gives the data-starved TCN (773 wells) more to overfit. "Learn from scratch" <
+"the right summary". **The sequence-model lever is now fully closed: architecture (transformer=restatement),
+config (all within 0.05 seed noise), and input representation (raw GR < rich) all exhausted. FINAL BEST =
+v27 / public 10.699.**

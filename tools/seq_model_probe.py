@@ -57,6 +57,11 @@ def build():
             v = np.nan_to_num(r[k].astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0)
             cols.append(v)
         log(f"  + {len(r.files)} rich GR-match channels")
+    if os.environ.get("SEQ_RAWGR") == "1":      # 'last breath': un-reduced fine correlation surface + raw GR
+        rg = np.load(f"{_ROGII_CACHE}/rogii_rawgr.npz")
+        for k in rg.files:
+            cols.append(np.nan_to_num(rg[k].astype(np.float32), nan=0.0, posinf=0.0, neginf=0.0))
+        log(f"  + {len(rg.files)} RAW-GR channels")
     if os.environ.get("SEQ_X") == "1":          # per-well trajectory + GR-envelope + tracker (CV-honest)
         from tools.frontier_fast import load_stack
         Xs = load_stack()["X"]
