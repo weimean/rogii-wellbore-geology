@@ -5,8 +5,8 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-TCN-EE4C2C?logo=pytorch&logoColor=white)](#approach--anchor-then-residual-ensemble)
 [![LightGBM](https://img.shields.io/badge/LightGBM-%2B_CatBoost-2C7BB6)](#approach--anchor-then-residual-ensemble)
 [![Kaggle](https://img.shields.io/badge/Kaggle-Code_Competition-20BEFF?logo=kaggle&logoColor=white)](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction)
-[![Result](https://img.shields.io/badge/public_RMSE-10.70-success)](#result)
-[![Improvement](https://img.shields.io/badge/vs_baseline-−33%25-brightgreen)](#result)
+[![Result](https://img.shields.io/badge/public_RMSE-10.57-success)](#result)
+[![Improvement](https://img.shields.io/badge/vs_baseline-−34%25-brightgreen)](#result)
 
 > Predicting **True Vertical Thickness (TVT)** along the un-logged section of horizontal oil wells by
 > correlating gamma-ray logs — a sequence-alignment problem tackled with an anchor-then-residual ensemble
@@ -22,17 +22,19 @@
 | | RMSE (public LB) |
 |---|---|
 | Forward-fill baseline | 15.91 |
-| **Final submission** (kernel v27) | **10.70** |
-| Improvement | **−5.21 (−33%)** |
+| **Final submission** (kernel v29) | **10.57** |
+| Improvement | **−5.35 (−34%)** |
 
-Every one of those points was validated on the real hidden leaderboard, and the whole pipeline is
-**fully honest and rules-compliant** — no target leakage, no train-only features at inference, licensed
-models only. The remaining gap to the very top of the board is a train/test well-ID *leak* that the leading
-public notebooks exploit; it does not transfer to the private board, so it was deliberately **not chased**.
+I validated every one of those points on the real hidden leaderboard. The whole pipeline stays **honest and
+rules-compliant**: no target leakage, no train-only features at inference, licensed models only. The gap to
+the very top of the board comes from a train/test well-ID *leak* the leading public notebooks exploit, plus
+bundled precomputed submission files of unknown provenance. Neither transfers to the private board, so I did
+not chase them. I tested that claim rather than assumed it (see [Verifying the ceiling](#verifying-the-ceiling)).
 
-The story of getting here is, honestly, the interesting part: I twice declared an "honest ceiling" and was
-twice proven wrong — first by **feature-poverty** (13.5 → 13.0), then by **architecture-poverty**
-(11.0 → 10.7). Both breakthroughs came from questioning an assumption, not from tuning.
+Getting here meant being wrong in public. I twice declared an "honest ceiling" and twice broke it: first
+through **feature-poverty** (13.5 → 13.0), then through **architecture-poverty** (11.0 → 10.7). A final
+round of studying the top public solutions added the drift-stabilising **U=TVT+Z projection** (10.70 → 10.57).
+Each step came from questioning an assumption, not from tuning knobs.
 
 ---
 
@@ -76,6 +78,7 @@ flowchart LR
         C["TCN sequence model<br/>(holistic GR reading)"]
     end
     ANCHOR --> FEAT --> MODELS --> B["Blend<br/>0.75·(anchor + correction)<br/>+ 0.25·fusion"]
+    B --> PP["Post-process<br/>U=TVT+Z projection<br/>+ warm-up damping"]
 ```
 
 **What each diversity source contributes (all confirmed on the public LB):**
@@ -88,6 +91,7 @@ flowchart LR
 | **Spatial formation-plane** | Recover absolute datum from *neighbour wells* | **−1.85** |
 | TabICL foundation model | In-context tabular learner, offline | −0.02 |
 | **TCN sequence model** | Read the whole log as a *sequence*, not row-by-row | **−0.32** |
+| **U=TVT+Z projection** | Predict the smooth formation *surface*, subtract the exact trajectory | **−0.13** |
 
 ---
 
@@ -102,7 +106,11 @@ ffill 15.91 ──▶ level regression 15.33 ──▶ HMM fusion 14.24 ──�
      │
      │  "11.0 is the honest ceiling" ✗  — it was ARCHITECTURE-POVERTY
      ▼
-  + TCN sequence model 10.85 ──▶ tune blend 10.76 ──▶ stronger TCN 10.70  ◀── FINAL
+  + TCN sequence model 10.85 ──▶ tune blend 10.76 ──▶ stronger TCN 10.70
+     │
+     │  studied the top public solutions — adopted one honest lever
+     ▼
+  + U=TVT+Z projection 10.57  ◀── FINAL
 ```
 
 - **False ceiling #1 (feature-poverty).** I repeatedly concluded "13.5 is input-limited" from testing
@@ -146,6 +154,20 @@ The scores are only worth as much as the discipline behind them. A few practices
   leakage (absent at inference) only by the real LB, and reverted. TabPFN was excluded on license grounds;
   the shipped TabICL is BSD-3 and runs fully offline.
 
+### Verifying the ceiling
+
+The top public notebooks report an "honest" score near 7.5, roughly 3 RMSE below mine. Before chasing that
+gap, I checked whether the number was real. I ported the one fully-reproducible public pipeline (particle
+filter + beam search + selector + robust polynomial) and ran it on my own 773 labeled wells, scoring only
+the eval rows against known truth.
+
+It scored 16 to 80 pooled RMSE, never close to 7.5. The particle filter diverges because the gamma-ray
+likelihood (signal-to-noise ≈ 0.02) cannot anchor its momentum walk. The reported 7.159 turned out to be a
+**bundled precomputed CSV** the notebook loads in preference to running any physics. So the claimed headroom
+was an artifact, not a method I had missed. That single experiment saved days of chasing a mirage, and it
+confirmed 10.57 sits near the honest reproducible ceiling. The lesson I keep relearning here: reproduce a
+claimed ceiling before believing it.
+
 ---
 
 ## Repo layout
@@ -164,8 +186,10 @@ data/           competition data (gitignored — redistribution is against comp 
 ```
 
 **Best places to read the reasoning:** [`notes/CONCLUSION.md`](notes/CONCLUSION.md) for the whole story in
-one file, and [`notes/approaches/27-sequence-model.md`](notes/approaches/27-sequence-model.md) for the
-sequence-model breakthrough that broke the second ceiling.
+one file, [`notes/approaches/27-sequence-model.md`](notes/approaches/27-sequence-model.md) for the
+sequence-model breakthrough that broke the second ceiling, and
+[`notes/approaches/28-public-notebook-adopt.md`](notes/approaches/28-public-notebook-adopt.md) for the study
+of the top public solutions that added the projection lever and debunked the claimed 7.5 ceiling.
 
 ---
 

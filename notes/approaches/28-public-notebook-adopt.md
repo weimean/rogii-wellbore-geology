@@ -79,5 +79,26 @@ Validated on cached OOF (`scratchpad/stage2_*.py`, beam aligned to cache by trut
 
 **Conclusion:** we already hold the public honest *feature* levers (likpf/seg_b/GR-resid, adopted notes/14+);
 the genuinely-new GR-alignment generators all fail on our weak GR. The one transferable public lever was the
-U=TVT+Z projection → **v29 10.565 (shipped)**. Any remaining gap to the claimed ~7.5 is either unverified
-(self-reported) or requires a fundamental tracker-quality rebuild with uncertain payoff — NOT a bolt-on.
+U=TVT+Z projection → **v29 10.565 (shipped)**.
+
+## Is the claimed ~7.5 even real? VERIFIED BY REPRODUCTION (2026-07-29) — NO.
+Ran the one fully-reproducible public honest pipeline (LB52 `adoredwhale` = PF + 14-config beam + selector +
+deg-5 robust projection; no pretrained artifacts) on OUR 200 labeled train wells (guarded: only TVT_input
+fed in, eval rows scored vs true TVT, pooled RMSE). `scratchpad/verify/`:
+
+| component | pooled RMSE (200 wells) |
+|---|---|
+| PF base (their workhorse) | 101.96 |
+| full selector (shipped output) | 79.98 |
+| + deg-5 projection | 80.02 |
+| beam alone (best honest component) | 16.09 |
+
+**Nothing near 7.5.** The PF DIVERGES — GR likelihood (SNR≈0.02, [[gr-signal-weakness]]) can't anchor the
+momentum random-walk, so it drifts 80–160 while true TVT stays in a ~15–40 band. PF output was bit-identical
+at 16/64/128 seeds → not a seed-count issue. The shipped **"7.159" is a bundled precomputed CSV**
+(`public_score_7_159_submission.csv`, loaded in preference to running the physics) — an opaque artifact, NOT
+physics output. So the twin-router's self-reported "honest ~7.5" table is UNVERIFIED marketing; the LB top
+(~4.68) is leak/artifact-driven on PUBLIC. **This corrects my mid-session over-correction** (I'd rewritten
+the record to claim a real ~7.5 honest ceiling based on their markdown tables — WRONG). The ORIGINAL thesis
+was closer: the gap to the top is leak/artifact, not reproducible honest method. **10.565 is near the honest
+reproducible ceiling.** LESSON: verify a claimed ceiling by REPRODUCING it, not by trusting a self-report.

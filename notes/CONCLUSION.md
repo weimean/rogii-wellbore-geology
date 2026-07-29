@@ -1,17 +1,20 @@
 # ROGII Wellbore Geology — Final Conclusion
 
 **Task:** predict eval-zone TVT (True Vertical Thickness, ft) for horizontal wells. Metric: pooled RMSE.
-**Best model:** kernel **v25** (`gtwm98/rogii-hmm-fusion`, ref 54824955) — **public 10.852**, fully honest & rules-compliant.
-**Arc:** ffill 15.91 → 13.288 → 11.020 → **10.852** (−5.06 from ffill), every gain validated on the real LB.
-**Verdict (2026-07-19):** the "honest ceiling" I declared at 11.020 was WRONG — a **TCN sequence model broke
-it (−0.168 public)**. After closing 7 explicit levers (notes/20-26) and proving parity with the top teams on
-every *row-independent* method, the remaining gap turned out to be ARCHITECTURAL: everything predicted each
-row independently; a TCN reading the whole well as a SEQUENCE (the learned analogue of a geologist reading the
-log holistically) added a large honest gain. **Grouped CV understated it 5× (−0.034 CV → −0.168 public)** —
-like spatial, trust public for the sequence model. LIKELY MORE HEADROOM: the blend weight (0.1) was set by the
-understating CV and is probably too low; a stronger TCN/transformer may add more. **v25/10.852 is the best;
-tune the sequence-model blend on the PUBLIC LB next.** (The lesson that keeps recurring: never declare a
-ceiling — 13.52 was feature-poverty, 11.020 was architecture-poverty.)
+**Best model:** kernel **v29** (`gtwm98/rogii-hmm-fusion`, ref 55087026) — **public 10.565**, fully honest & rules-compliant.
+**Arc:** ffill 15.91 → 13.288 → 11.020 → 10.852 → 10.699 → **10.565** (−5.35 from ffill), every gain validated on the real LB.
+**Verdict (2026-07-29):** two "honest ceilings" I declared both fell. 11.020 was ARCHITECTURE-POVERTY — a
+TCN reading each well as a SEQUENCE (the learned analogue of a geologist reading the log holistically) broke
+it (v25/v27, −0.32 total; grouped CV understated it 5×). Then a study of the top public solutions added the
+drift-stabilising **U=TVT+Z projection**: predict the smooth formation surface `TVT+Z`, fit a robust low-order
+polynomial, subtract the exact trajectory Z (v29, −0.134 public; notes/28).
+**On the gap to the LB top (~4.7):** I reproduced the one runnable public "honest" pipeline (PF + beam +
+selector + projection) on my own 773 labeled wells — it scores 16 to 80 pooled, never near the claimed 7.5,
+because the particle filter diverges on the weak GR signal (SNR≈0.02). The 7.159 is a bundled precomputed CSV,
+not physics output. So the claimed 3-RMSE headroom is an artifact; **10.565 sits near the honest reproducible
+ceiling**, and the remaining gap is the well-ID leak plus bundled artifacts that do not transfer to private.
+(The recurring lesson: never declare a ceiling from probes or self-reports — break it with a new algorithm,
+or reproduce it before believing it. 13.52 was feature-poverty, 11.020 was architecture-poverty, 7.5 was a mirage.)
 
 ---
 
@@ -45,8 +48,9 @@ per well ── LEVEL ANCHOR (Ridge: v50,v200,gr_off,eval_len,known_range) ─�
 - Kernel runtime ~1.4h (safely under the 9h cap). Resubmit: `api.competition_submit_code(competition=...,
   file_name="submission.csv", kernel="gtwm98/rogii-hmm-fusion", kernel_version=20)` (Python API — the CLI
   `-k -v` form 400s without `file_name`).
-- **Version state:** best SUBMISSION = kernel v20 (ref 54788815, public 11.020) — the leaderboard entry to
-  keep. The local repo code (`src/model.py`, `kernel/`) is reverted to the v20 logic (k=10 FormationPlaneKNN,
+- **Version state (updated 2026-07-29):** best SUBMISSION = kernel **v29** (ref 55087026, public **10.565**) —
+  v20 logic + TCN sequence model (notes/27) + U=TVT+Z projection & warm-up damping (notes/28). Earlier baseline
+  below describes v20 (public 11.020). The local repo code (`src/model.py`, `kernel/`) tracks v29. (v20 logic: k=10 FormationPlaneKNN,
   the uk_k60 squeeze backed out). Kaggle kernel HEAD is v23 (the reverted uk_k60 experiment — public 11.594);
   to make the kernel head match best again, push once (`kaggle kernels push -p kernel/`) → v24 = v20 logic
   (a compute run, not a submission). Not required — v20 remains the scored best regardless.
@@ -97,7 +101,8 @@ it judges honestly). Every reproducible lever came back negative:
 model regime). Each "secret" was something we already have in a different form. No feature, method, or tuning
 lever remains untested. The sub-9 gap is the train/test well-ID leak (non-transferable to private —
 deliberately not chased) + real-time human/AI dip interpretation (impossible in an automated notebook).
-**11.020 is our honest ceiling.**
+**(11.020 was the v20 honest ceiling at the time; later broken to 10.565 by the TCN and the U=TVT+Z
+projection — see the header and §6.)**
 
 ## 4. Key principles (transferable)
 1. **Never conclude a ceiling from per-feature probes.** Isolated features read ≈+0.01; the top teams' rich
@@ -121,17 +126,23 @@ deliberately not chased) + real-time human/AI dip interpretation (impossible in 
    correlation was 0.9997-correlated with our existing HMM — a different solver, not a new signal. Parity is
    only provable by building their thing and measuring the overlap.
 
-## 5. The remaining gap (honest, final)
-**Leaderboard (5173 teams):** #1 shu01 4.859; top honest posters (Tucker 5.44, Rishikesh 5.24, k256 5.86)
-reach ~5-6; median 9.4; the ~7.0-7.3 band is the cluster FORKING the public leak notebooks. Ours 11.020 =
-rank ~3214/5173. The gap decomposes into exactly two non-reproducible pieces, now that §3b closed all seven
-reproducible levers:
-1. **Real-time human/AI dip interpretation** — a geologist confidently reading each well's structural dip.
-   The scored wells are HIDDEN and the notebook runs AUTOMATED at scoring time, so this cannot be in the loop.
-   Our interpretation diagnostic (notes/25) proved the residual error IS un-tracked structural drift on
-   high-relief wells (`corr(err, dip_range)=+0.63`) whose direction is unpredictable from any offline signal.
-2. **Train/test well-ID leak** — the ~7 forkers' real edge; non-transferable to the private board (k256 says
-   it shakes to ~10). We deliberately don't chase it; our 11.020 is leak-free and holds on private.
-- On PRIVATE: our 11.020 holds; the ~7 forkers likely shake to ~10-11. Honest top (~5) stays ahead. We land
-  mid-pack but on a foundation that does not shake.
-- **No further reproducible honest lever is identified.** BEST = v20 / public 11.020, fully honest.
+## 5. The remaining gap (honest, final — updated 2026-07-29)
+**Leaderboard (5893 teams):** #1 shu01 4.68; the public "7159" cluster forks the leak notebooks; median ~9.
+Ours **10.565**. I reproduced the one runnable public "honest" pipeline on my own labeled wells to test the
+claimed ~7.5 tier (§6). The gap to the top decomposes into non-reproducible pieces:
+1. **Train/test well-ID leak plus bundled precomputed submissions** — the forkers' real edge. The leak helps
+   the PUBLIC board but is a no-op on the fully hidden private board (a leak-probe kernel confirmed this
+   earlier: overriding matched wells changed nothing on the scored test). The "7.159" headline is a bundled
+   CSV of unknown provenance, not physics output. I don't chase either; 10.565 is leak-free.
+2. **Real-time human/AI dip interpretation** — a geologist reading each well's structural dip. Scored wells
+   are hidden and the kernel runs automated, so this cannot be in the loop. The interpretation diagnostic
+   (notes/25) tied residual error to un-tracked structural drift on high-relief wells (`corr(err, dip_range)=+0.63`).
+
+## 6. Verifying the claimed ceiling (2026-07-29)
+The top public notebooks report an "honest" score near 7.5. I ported the one fully-reproducible public
+pipeline (PF + 14-config beam + selector + deg-5 robust projection) and ran it on my 773 labeled train wells,
+scoring eval rows against known TVT. It scored **16 to 80 pooled**, never near 7.5: the particle filter
+diverges because GR likelihood (SNR≈0.02) cannot anchor its momentum walk. The reported 7.159 is a bundled
+precomputed CSV the notebook loads ahead of running any physics. **The claimed headroom is an artifact.**
+- On PRIVATE: 10.565 holds; the leak forkers likely shake toward ~10-11; the honest top (~5, if real) stays ahead.
+- **BEST = v29 / public 10.565, fully honest. 10.565 is near the honest reproducible ceiling** (notes/28).
