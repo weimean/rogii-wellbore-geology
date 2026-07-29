@@ -54,9 +54,30 @@ Sign matters: `tvt+z` −0.16, `tvt`-alone +0.30, `tvt-z` +2.3 (confirms the pub
 noise-fit: **76% of wells improve** (586/773), median per-well −0.14, both well-halves consistent
 (−0.171 / −0.157), flat optimum plateau over deg 3–4 / blend 0.6–0.8. This is a per-well deterministic
 transform in the geological coordinate → same category as the sequence-model lever that grouped CV
-**understated 5×** (notes/27), NOT a blend knob → expect public gain ≥ −0.17. Wired into
-`kernel/rogii_hmm_fusion.py` and `src/model.py` (`_postproc_well`). **Public LB result: PENDING (v29).**
+**understated 5×** (notes/27), NOT a blend knob. Wired into `kernel/rogii_hmm_fusion.py` and `src/model.py`
+(`_postproc_well`). **✅ PUBLIC LB: v29 = 10.565 (ref 55087026), from v27 10.699 = −0.134.** Transferred
+(OOF −0.173 → public −0.134; slightly less because the test base uses full-train models = less drift to
+correct). NEW BEST. Confirms the "adopt public honest levers" thesis.
 
-## Stage 2 — queued
-New decorrelated candidate generators (beam-search aligner, multi-scale NCC, likelihood-weighted PF) +
-`seg_b_well`/GR-residual features. Heavy PF ensembles to run on Kaggle compute.
+## Stage 2 audit (2026-07-29) — we already hold most of the levers
+Grep of kernel/src: likelihood-weighted multi-seed PF (`pf_lik_ensemble`, notes/14), `seg_b_well` segment
+offsets, and GR-residual-at-candidate-offset features are ALREADY present. The two candidate generators we
+genuinely DON'T have: **beam-search DP aligner** and **multi-scale NCC self-correlation** (own known-zone GR
+template vs eval windows → a TVT path; distinct from our spatial DenseANCC). Since we hold most levers yet
+sit ~3 RMSE behind ~7.5, part of the gap is likely tracker QUALITY + their physics-dominant blend (0.7
+physics vs our 0.25), not missing features — probe that alongside the two new generators.
+
+## Stage 2 — mostly NULL (2026-07-29), the new generators hit our GR-weakness wall
+Validated on cached OOF (`scratchpad/stage2_*.py`, beam aligned to cache by truth-block matching):
+
+| lever | result | verdict |
+|---|---|---|
+| **beam-search DP aligner** (banded Viterbi, L1 GR-mismatch + move penalty) | alone **43.05** RMSE; blend w=0.05 **+0.39** | NULL — raw GR has no level anchor, drifts to wrong TVT branches (GR SNR≈0.02, [[gr-signal-weakness]]). Residual-corr vs base 0.38, not even decorrelated. |
+| **physics-upweight** (their 0.7-physics arch) | fusion 0.25→0.40→0.70 monotonically WORSE; fusion alone 13.83 vs anchor+corr **10.68** | REFUTED — our fusion is a *weak* member (theirs is strong); we already correctly down-weight it. Their architecture doesn't transfer. |
+| **fusion-downweight** 0.25→0.10 | OOF −0.087 BUT half A −0.173 / half B **flat** | MIRAGE — blend-knob overfit to one subset (cf. 4 historical fusion-weight public reverts; grouped CV overstates blend knobs). Not submittable. |
+| **multi-scale NCC self-corr** | not built | Same "recover TVT by GR alignment" family as beam; its raw-GR-shape signal already tested NULL in notes/27 ("last breath"). Building = re-confirming that null. |
+
+**Conclusion:** we already hold the public honest *feature* levers (likpf/seg_b/GR-resid, adopted notes/14+);
+the genuinely-new GR-alignment generators all fail on our weak GR. The one transferable public lever was the
+U=TVT+Z projection → **v29 10.565 (shipped)**. Any remaining gap to the claimed ~7.5 is either unverified
+(self-reported) or requires a fundamental tracker-quality rebuild with uncertain payoff — NOT a bolt-on.
