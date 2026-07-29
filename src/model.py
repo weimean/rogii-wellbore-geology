@@ -860,6 +860,42 @@ def _adaptive_w(mean_dis, gbm, w0=0.70, slope=0.05, lo=0.55, hi=1.0):
     return float(np.clip(w0 + slope * z, lo, hi))
 
 
+# ---- drift-stabilising post-process (notes/28, adopted from public honest architecture) --------
+# U = TVT + Z is the geological formation surface: smooth & ~polynomial over the eval zone, while TVT
+# wiggles with the trajectory. Fit a robust (Tukey-IRLS) low-order poly to U vs sequence, then
+# TVT = U_smooth - Z re-injects the exact trajectory, killing slow drift/level error in the prediction.
+_PROJ_DEG = 4
+_PROJ_BLEND = 0.75
+_WARMUP_TAU = 100.0
+
+
+def _robfit(x: np.ndarray, y: np.ndarray, deg: int, iters: int = 4) -> np.ndarray:
+    xn = (x - x.mean()) / (x.std() + 1e-9)
+    w = np.ones_like(y)
+    for _ in range(iters):
+        cf = np.polyfit(xn, y, deg, w=np.sqrt(w))
+        res = y - np.polyval(cf, xn)
+        s = 1.4826 * np.median(np.abs(res - np.median(res))) + 1e-6
+        u = np.clip(res / (4.685 * s), -1, 1)
+        w = (1 - u * u) ** 2
+    return np.polyval(cf, xn)
+
+
+def _postproc_well(ev_pred: np.ndarray, Z_ev: np.ndarray, md_since: np.ndarray,
+                   last_tvt: np.ndarray) -> np.ndarray:
+    n = len(ev_pred)
+    out = np.asarray(ev_pred, float).copy()
+    if n >= _PROJ_DEG + 2:
+        U = out + Z_ev
+        try:
+            Usm = _robfit(np.arange(n, dtype=float), U, _PROJ_DEG)
+            out = _PROJ_BLEND * (Usm - Z_ev) + (1 - _PROJ_BLEND) * out
+        except Exception as e:  # numerical guard on degenerate wells
+            print("proj skip:", repr(e)[:80])
+    out = last_tvt + (out - last_tvt) * (1.0 - np.exp(-md_since / _WARMUP_TAU))
+    return out
+
+
 def gbm_stack(well: Well, level_model, gbm, blend: float = 0.75) -> np.ndarray:
     """Blend the seed-ensembled (LightGBM+CatBoost)-corrected anchor with the variance fusion.
     NOTE: this is the CANONICAL local model. The production kernel additionally blends two offline
@@ -880,7 +916,17 @@ def gbm_stack(well: Well, level_model, gbm, blend: float = 0.75) -> np.ndarray:
     else:
         pred = gbm_pred
     gbmA = f["anchor"] + pred
-    out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]  # global w=0.75 (adaptive hurt public)
+    em = f["em"]
+    ev_pred = blend * gbmA + (1 - blend) * f["fusion"]  # global w=0.75 (adaptive hurt public)
+    # drift-stabilising post-process: U=TVT+Z robust-poly projection + warm-up damping (notes/28,
+    # adopted from the public honest architecture; validated -0.17 pooled OOF, 76% of wells improve)
+    h = well.horizontal
+    Z_ev = h["Z"].to_numpy(float)[em]
+    last_ev = out[em].astype(float)                          # ffill = last known TVT carried forward
+    kn = h[h[TARGET_INPUT].notna()]
+    ps_md = float(kn["MD"].iloc[-1]) if len(kn) else 0.0
+    md_since = h["MD"].to_numpy(float)[em] - ps_md
+    out[em] = _postproc_well(ev_pred, Z_ev, md_since, last_ev)
     return out
 
 

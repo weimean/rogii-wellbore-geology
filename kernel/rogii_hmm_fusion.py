@@ -816,6 +816,33 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
             "tabicl": tabicl, "tcn": tcn, "tfm": tfm, "dis_mean": float(np.mean(dis)), "dis_std": float(np.std(dis) + 1e-9)}
 
 
+# ---- post-processing (notes/28, adopted from public honest architecture) -----------------------
+# U = TVT + Z is the geological formation surface: smooth & ~polynomial over the eval zone, while TVT
+# itself wiggles with the trajectory. Fit a robust (Tukey-IRLS) low-order poly to U vs sequence, then
+# TVT = U_smooth - Z re-injects the exact trajectory. This kills the prediction's slow drift/level error
+# (validated -0.17 pooled OOF; 76% of wells improve). Warm-up damping then ramps predictions out of the
+# last known TVT so the eval zone starts anchored (targets the ~68% LEVEL error component).
+_PROJ_DEG = 4; _PROJ_BLEND = 0.75; _WARMUP_TAU = 100.0
+def _robfit(x, y, deg, iters=4):
+    xn = (x - x.mean()) / (x.std() + 1e-9); w = np.ones_like(y)
+    for _ in range(iters):
+        cf = np.polyfit(xn, y, deg, w=np.sqrt(w)); res = y - np.polyval(cf, xn)
+        s = 1.4826 * np.median(np.abs(res - np.median(res))) + 1e-6
+        u = np.clip(res / (4.685 * s), -1, 1); w = (1 - u * u) ** 2
+    return np.polyval(cf, xn)
+def _postproc_well(ev_pred, Z_ev, md_since, last_tvt):
+    n = len(ev_pred); out = np.asarray(ev_pred, float).copy()
+    if n >= _PROJ_DEG + 2:
+        U = out + Z_ev
+        try:
+            Usm = _robfit(np.arange(n, dtype=float), U, _PROJ_DEG)
+            out = _PROJ_BLEND * (Usm - Z_ev) + (1 - _PROJ_BLEND) * out
+        except Exception as e:
+            print("proj skip:", repr(e)[:80])
+    out = last_tvt + (out - last_tvt) * (1.0 - np.exp(-md_since / _WARMUP_TAU))
+    return out
+
+
 def gbm_stack(well, level_model, gbm, blend=0.75):
     f = _stack_features(well, level_model, spatial_ref=gbm.get("spatial_ref"), formation_ref=gbm.get("formation_ref"))
     out = baseline_ffill(well.horizontal).astype(float)
@@ -850,7 +877,16 @@ def gbm_stack(well, level_model, gbm, blend=0.75):
         except Exception as e:
             print("TCN predict skip:", repr(e)[:120])
     gbmA = f["anchor"] + pred
-    out[f["em"]] = blend * gbmA + (1 - blend) * f["fusion"]
+    em = f["em"]
+    ev_pred = blend * gbmA + (1 - blend) * f["fusion"]
+    # drift-stabilising post-process in U=TVT+Z space + warm-up damping (notes/28)
+    h = well.horizontal
+    Z_ev = h["Z"].to_numpy(float)[em]
+    last_ev = out[em].astype(float)                       # ffill = last known TVT carried forward
+    kn = h[h[TARGET_INPUT].notna()]
+    ps_md = float(kn["MD"].iloc[-1]) if len(kn) else 0.0
+    md_since = h["MD"].to_numpy(float)[em] - ps_md
+    out[em] = _postproc_well(ev_pred, Z_ev, md_since, last_ev)
     return out
 
 
