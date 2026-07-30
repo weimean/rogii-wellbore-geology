@@ -657,7 +657,10 @@ def _stack_features(well, level_model, spatial_ref=None, formation_ref=None):
 # spatial(3)+formation(22)+lik(5) = 30 neighbour/derived cols) so it stays CV-honest & train/test-consistent.
 # Grouped-CV OOF −0.034 (per-well, no neighbours; different function class). Blended 0.1 into the correction.
 _TCN_S = 256          # resample each well's eval zone to this many stages
-_TCN_DROP = 30        # trailing X cols to exclude = s_cols(3) + fcols(22) + lik_cols(5)
+# Avenue C (notes/28): feed the spatial(3)+formation(22) structural channels INTO the TCN (drop only the
+# 5 lik cols). CV can't judge this (understates TCN 5x); v30 submission is the only way to test. Long shot
+# per notes/27 (more channels overfit the data-starved TCN); revert to 30 if v30 regresses vs v29 10.565.
+_TCN_DROP = 5         # trailing X cols to exclude = lik_cols(5); keeps spatial+formation for the TCN
 try:
     import torch as _torch
     import torch.nn as _tnn
