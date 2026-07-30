@@ -15,6 +15,9 @@
 **Kaggle Featured Code Competition** · metric **RMSE** · notebook-only, ≤ 9 h, internet disabled.
 [Competition page](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction)
 
+📖 **[Read the case study →](WRITEUP.md)** — the reasoning, the two false ceilings, and the round where I
+rebuilt a competitor's claimed score to prove it was a mirage.
+
 ---
 
 ## Result
