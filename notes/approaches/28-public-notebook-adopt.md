@@ -102,3 +102,23 @@ physics output. So the twin-router's self-reported "honest ~7.5" table is UNVERI
 the record to claim a real ~7.5 honest ceiling based on their markdown tables — WRONG). The ORIGINAL thesis
 was closer: the gap to the top is leak/artifact, not reproducible honest method. **10.565 is near the honest
 reproducible ceiling.** LESSON: verify a claimed ceiling by REPRODUCING it, not by trusting a self-report.
+
+## Round 2 (2026-07-30) — four more untried avenues, all CLOSED
+User pushed back that avenues remained. Fair — round 1 only closed candidate *generators* (beam/NCC).
+Tested four more via a fast single-LGB grouped-OOF harness (`scratchpad/fast_ablate.py`, baseline postproc
+10.7632) for the feature routes, and an LB submission for the TCN route:
+
+| avenue | route | result | verdict |
+|---|---|---|---|
+| A — spatial→dip prior | GBM feature | −0.005 OOF (noise); raw WORSE | NULL. corr(spatial_dip, true_dip)=0.48 is real, but a row-independent GBM can't use a per-row dip-rate (it already has the spatial surface via tvtF). |
+| B — global structural surface | GBM feature | +0.003 OOF | NULL. Thin-plate-spline LOWO surface helps raw blend (−0.008) but the U-projection already captures that smoothing → nets to zero. |
+| D — GR affine calibration | GBM feature | +0.023 OOF | NEGATIVE. Extra a/b/residual cols let the GBM overfit. |
+| **C — spatial→TCN** | LB (v30) | **10.722 (+0.157)** | REVERTED. Feeding spatial+formation channels (_TCN_DROP 30→5) overfits the data-starved 773-well TCN — exactly the notes/27 "more channels hurt" lesson. |
+
+**Not pursued:** A's *tracker* route (feed spatial dip into HMM/PF sequentially) — the trackers are a weak
+0.25 member we already downweight, and the U-projection already stabilises the drift the dip would target,
+so EV is low; whole-pipeline bagging (~−0.02 safe, not worth a submission slot alone). The corr-0.48 spatial
+dip integrates to 81 (diverges) — better than local-dip (110) but nowhere near usable standalone.
+
+**FINAL: three feature routes null/negative + the TCN route regressed. This round every avenue was tested
+empirically, not assumed. v29 / public 10.565 stands as the best; 10.565 is the honest reproducible ceiling.**
