@@ -385,7 +385,7 @@ def _hmm2_fb(gr_obs, md, gr_grid, grid, rates, gs, step,
 def hmm_posterior(well: Well, s_target: int = 250, step: float = 0.5, band_pad: float = 90.0,
                   n_rates: int = 21, rate_span: float = 0.035, mom: float = 0.98,
                   sig_r: float = 0.003, sig_p: float = 0.45, lam: float = 1.0,
-                  df: float = 4.0, emission: str = "t"):
+                  df: float = 4.0, emission: str = "t", dip_center: float | None = None):
     """Run the 2nd-order HMM on a well; return (pred_rows, std_rows) over ALL rows
     (known rows = ffill, eval rows = posterior mean/std). Falls back to ffill on failure."""
     h, t = well.horizontal, well.typewell
@@ -419,6 +419,11 @@ def hmm_posterior(well: Well, s_target: int = 250, step: float = 0.5, band_pad: 
     md_b = np.array([md_e[a:b].mean() for a, b in zip(edges[:-1], edges[1:])])
 
     rates = np.linspace(-rate_span, rate_span, n_rates)
+    # Avenue #2 (notes/28): bias the rate state toward the neighbour-well structural dip. Shift the whole
+    # rate grid + the initial-rate prior toward dip_center (a spw-blend of spatial dip & local dip).
+    if dip_center is not None and np.isfinite(dip_center):
+        rates = float(dip_center) + rates
+        ir = 0.5 * float(dip_center) + 0.5 * ir
     start_p = (last_tvt - gmin) / step
     try:
         mean_b, var_b = _hmm2_fb(gr_b, md_b, gr_grid, grid, rates, gs, step,
@@ -833,12 +838,12 @@ def fit_gbm_stack(train_wells, level_model, step: int = GBM_STEP, seeds=(0, 1, 2
     # Seed-ensemble (3 seeds each): removes the ~0.08 single-seed lockbox lottery + reduces variance.
     models = []
     for sd in seeds:
-        # Huber loss (delta=10): clips the worst per-well LEVEL outliers, -0.064 single-LGB OOF (notes/28)
+        # Huber REVERTED: single-LGB OOF gain didn't transfer (v31 10.565->10.596, notes/28). Back to MSE.
         models.append(lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
                       min_child_samples=200, reg_lambda=1.0, subsample=0.8, subsample_freq=1,
-                      colsample_bytree=0.8, objective="huber", alpha=10.0, random_state=sd, n_jobs=-1, verbose=-1).fit(X, y))
+                      colsample_bytree=0.8, random_state=sd, n_jobs=-1, verbose=-1).fit(X, y))
         models.append(CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
-                      loss_function="Huber:delta=10", rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X, y))
+                      rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X, y))
     # Neural net (different function class) for DIVERSITY. Worse alone but blended 0.7/0.3 adds
     # -0.20 pooled CV (13.20 -> 13.00) via decorrelated errors (corr 0.64). notes/13.
     Xn = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
