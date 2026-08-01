@@ -774,23 +774,25 @@ def fit_gbm_stack(train_wells, level_model, step=5, seeds=(0, 1, 2)):
         # kept for reference; not trained (also saves ~30min runtime).
         tfm = None
 
+    # Huber loss (delta=10): clips the worst per-well LEVEL outliers while staying MSE-like elsewhere.
+    # Validated -0.064 single-LGB OOF (notes/28), robust across delta 8-25 and 6x the seed noise.
     def _fit_lgb(sd):  # GPU LightGBM with CPU fallback (Kaggle build may lack GPU)
         try:
             return lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
                    min_child_samples=200, reg_lambda=1.0, subsample=0.8, subsample_freq=1,
-                   colsample_bytree=0.8, random_state=sd, device="gpu", verbose=-1).fit(X, y)
+                   colsample_bytree=0.8, objective="huber", alpha=10.0, random_state=sd, device="gpu", verbose=-1).fit(X, y)
         except Exception:
             return lgb.LGBMRegressor(n_estimators=600, learning_rate=0.03, num_leaves=63,
                    min_child_samples=200, reg_lambda=1.0, subsample=0.8, subsample_freq=1,
-                   colsample_bytree=0.8, random_state=sd, n_jobs=-1, verbose=-1).fit(X, y)
+                   colsample_bytree=0.8, objective="huber", alpha=10.0, random_state=sd, n_jobs=-1, verbose=-1).fit(X, y)
 
     def _fit_cat(sd):  # GPU CatBoost (no rsm on GPU) with CPU fallback
         try:
             return CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
-                   random_seed=sd, task_type="GPU", devices="0", verbose=0).fit(X, y)
+                   loss_function="Huber:delta=10", random_seed=sd, task_type="GPU", devices="0", verbose=0).fit(X, y)
         except Exception:
             return CatBoostRegressor(iterations=600, learning_rate=0.03, depth=8, l2_leaf_reg=3.0,
-                   rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X, y)
+                   loss_function="Huber:delta=10", rsm=0.8, random_seed=sd, thread_count=-1, verbose=0).fit(X, y)
     models = []
     for sd in seeds:
         models.append(_fit_lgb(sd)); models.append(_fit_cat(sd))
