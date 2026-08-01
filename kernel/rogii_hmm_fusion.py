@@ -335,6 +335,55 @@ def pf_posterior(well, n_particles=600, s_target=250, band_pad=90.0,
     return (out, std, float(loglik)) if return_ll else (out, std)
 
 
+def pf_spatial(well, gxy, spw=0.5, n_particles=600, s_target=250, band_pad=90.0,
+               mom=0.98, sig_r=0.003, sig_p=0.45, lam=1.0, df=4.0, seed=0):
+    """Avenue #2 (notes/28): particle filter whose rate prior is reverted toward the neighbour-well
+    STRUCTURAL DIP (gxy = surface gradient dF/dX,dF/dY, projected onto the trajectory heading) instead of
+    only the local last-30 dip. spw=0.5 blends the two. Used as a decorrelated GBM feature (-0.15 OOF,
+    both well-halves; grouped CV understates it). Returns full-length TVT prediction."""
+    rng = np.random.default_rng(seed)
+    h, t = well.horizontal, well.typewell
+    kn = h[h[TARGET_INPUT].notna()]; ev = h[h[TARGET_INPUT].isna()]
+    ff = baseline_ffill(h).astype(float)
+    if len(ev) == 0 or len(kn) < 50 or gxy is None:
+        return ff
+    tw_tvt = t["TVT"].to_numpy(float); tw_gr = gaussian_filter1d(t["GR"].ffill().bfill().to_numpy(float), 3)
+    last = float(kn[TARGET_INPUT].iloc[-1]); tw_at = np.interp(kn[TARGET_INPUT].values, tw_tvt, tw_gr)
+    gs = float(np.clip(np.nanstd(kn["GR"].fillna(np.nanmean(tw_gr)).values - tw_at), 10.0, 60.0))
+    tail = kn.tail(30)
+    ir = float((tail[TARGET_INPUT].iloc[-1] - tail[TARGET_INPUT].iloc[0]) / max(tail["MD"].iloc[-1] - tail["MD"].iloc[0], 1.0))
+    lo = max(tw_tvt.min() - 40, last - band_pad); hi = min(tw_tvt.max() + 40, last + band_pad)
+    gr_all = h["GR"].interpolate(limit_direction="both").fillna(np.nanmean(tw_gr)).to_numpy(float)
+    ei = ev.index.values; gr_e = gr_all[ei]; md_e = ev["MD"].to_numpy(float)
+    n = len(ei); S = min(s_target, n); edges = np.linspace(0, n, S + 1).astype(int)
+    binm = lambda a: np.array([a[x:y].mean() for x, y in zip(edges[:-1], edges[1:])])
+    gr_b = binm(gr_e); md_b = binm(md_e); dm = np.diff(md_b, prepend=float(kn["MD"].iloc[-1]))
+    # per-stage structural dip = grad . heading - dZ/dMD
+    gx, gy = gxy
+    Xe = h["X"].to_numpy(float)[ei]; Ye = h["Y"].to_numpy(float)[ei]; Ze = h["Z"].to_numpy(float)[ei]
+    Xb, Yb, Zb = binm(Xe), binm(Ye), binm(Ze)
+    hx = np.gradient(Xb) / (dm + 1e-9); hy = np.gradient(Yb) / (dm + 1e-9); hz = np.gradient(Zb) / (dm + 1e-9)
+    sp_stage = gx * hx + gy * hy - hz
+    ir0 = spw * float(np.nanmedian(sp_stage)) + (1 - spw) * ir if np.isfinite(np.nanmedian(sp_stage)) else ir
+    pos = last + rng.normal(0, 3.0, n_particles); rate = ir0 + rng.normal(0, 0.01, n_particles)
+    w = np.full(n_particles, 1.0 / n_particles); mean = np.zeros(S)
+    for s in range(S):
+        rate = mom * rate + rng.normal(0, sig_r, n_particles)
+        if np.isfinite(sp_stage[s]):
+            rate = rate + (1 - mom) * spw * (sp_stage[s] - rate)   # revert rate toward structural dip
+        pos = np.clip(pos + rate * dm[s] + rng.normal(0, sig_p, n_particles), lo, hi)
+        zsc = (gr_b[s] - np.interp(pos, tw_tvt, tw_gr)) / gs
+        ll = -0.5 * (df + 1.0) * np.log1p(zsc ** 2 / df) * lam
+        m = ll.max(); wnew = w * np.exp(ll - m); sw = wnew.sum()
+        w = np.full(n_particles, 1.0 / n_particles) if (sw <= 0 or not np.isfinite(sw)) else wnew / sw
+        mean[s] = (w * pos).sum()
+        if 1.0 / (w ** 2).sum() < n_particles / 2:
+            idx = _sysresample(w, rng); pos = pos[idx]; rate = rate[idx]; w = np.full(n_particles, 1.0 / n_particles)
+    centers = 0.5 * (edges[:-1] + edges[1:]); pred = np.interp(np.arange(n), centers, mean)
+    out = ff.copy(); out[ei] = np.where(np.isfinite(pred), pred, last)
+    return out
+
+
 def pf_lik_ensemble(well, scales=(3.0, 5.0, 8.0, 12.0), n_particles=350, n_seeds=8):
     em = well.eval_mask.to_numpy(); ne = int(em.sum())
     if ne == 0:
@@ -518,6 +567,31 @@ class _FormationPlaneKNN:
         pred[~vk.any(1)] = self.fa.mean(0)
         return pred, np.where(vk, dk, np.inf).min(1).astype(np.float32)
 
+    def grad(self, xq, yq, self_wid=None):
+        """Mean-over-formations structural-surface gradient (dF/dX, dF/dY) at (xq,yq), self-excluded.
+        Avenue #2 (notes/28): the local structural dip the trackers use as a prior."""
+        q = np.array([[xq, yq]], float) / self.scale; k = self.k; nf = min(k + 5, len(self.df))
+        dist, idx = self.tree.query(q, k=nf)
+        if self_wid in self.wmap:
+            dist = np.where(idx == self.wmap[self_wid], np.inf, dist)
+        ordr = np.argpartition(dist, min(k - 1, nf - 1), 1)[:, :k]
+        dk = np.take_along_axis(dist, ordr, 1); ik = np.take_along_axis(idx, ordr, 1)
+        vk = np.isfinite(dk); w = np.where(vk, 1. / (dk + 1e-3), 0.).astype(np.float64)
+        if not vk.any():
+            return 0.0, 0.0
+        xn = self.xa[ik]; yn = self.ya[ik]; fn = self.fa[ik]; wx = w * xn; wy = w * yn
+        A = np.zeros((1, 3, 3))
+        A[:, 0, 0] = (wx * xn).sum(1); A[:, 0, 1] = (wx * yn).sum(1); A[:, 0, 2] = wx.sum(1)
+        A[:, 1, 0] = A[:, 0, 1]; A[:, 1, 1] = (wy * yn).sum(1); A[:, 1, 2] = wy.sum(1)
+        A[:, 2, 0] = A[:, 0, 2]; A[:, 2, 1] = A[:, 1, 2]; A[:, 2, 2] = w.sum(1)
+        A[:, 0, 0] += 1e-9; A[:, 1, 1] += 1e-9; A[:, 2, 2] += 1e-9
+        rhs = np.stack([(wx[:, :, None] * fn).sum(1), (wy[:, :, None] * fn).sum(1), (w[:, :, None] * fn).sum(1)], 1)
+        try:
+            coef = np.linalg.solve(A, rhs)[0]
+        except Exception:
+            coef = np.linalg.pinv(A[0]) @ rhs[0]
+        return float(coef[0].mean()), float(coef[1].mean())
+
 
 class _DenseANCCImputer:
     def __init__(self, wells, spw=60, k=20):
@@ -643,8 +717,18 @@ def _stack_features(well, level_model, spatial_ref=None, formation_ref=None):
     fcols = _formation_cols(h, ei, em, well.name, anchor, formation_ref)  # rich formation plane (notes/14)
     lik = pf_lik_ensemble(well)  # likelihood-weighted multi-seed PF ensemble (notes/14)
     lik_cols = [(lik[i] - anchor).astype(np.float32) for i in range(lik.shape[0])] if lik is not None else [np.zeros(em.sum(), np.float32)] * 5
+    # Avenue #2 (notes/28): spatial-dip PF — a PF whose rate prior reverts toward the neighbour-well
+    # structural dip; decorrelated from the local-dip trackers (-0.15 OOF, both well-halves). Spatial
+    # feature -> stays out of the TCN (in the trailing dropped block, _TCN_DROP=31; cf. v30 regression).
+    spdip_col = np.zeros(int(em.sum()), np.float32)
+    if formation_ref is not None and formation_ref.get("FI") is not None:
+        try:
+            gx, gy = formation_ref["FI"].grad(float(np.median(x[ei])), float(np.median(y[ei])), well.name)
+            spdip_col = (pf_spatial(well, (gx, gy))[em] - anchor).astype(np.float32)
+        except Exception as e:
+            print("spdip skip:", repr(e)[:80])
     X = np.column_stack([cols[k] for k in STACK_FEATS] + [anchor, hp[em] - anchor, fusion, wt]
-                        + pf_cols + a_cols + b_cols + r_cols + s_cols + fcols + lik_cols)
+                        + pf_cols + a_cols + b_cols + r_cols + s_cols + fcols + lik_cols + [spdip_col])
     res = dict(X=X, anchor=anchor, fusion=fusion, em=em, mean_dis=float(np.mean(a_absdiff)))
     if "TVT" in h.columns:
         res["truth"] = ev["TVT"].values
@@ -659,7 +743,7 @@ def _stack_features(well, level_model, spatial_ref=None, formation_ref=None):
 _TCN_S = 256          # resample each well's eval zone to this many stages
 # Avenue C REVERTED (notes/28): feeding spatial+formation into the TCN (_TCN_DROP=5) REGRESSED public
 # 10.565->10.722 (v30) — extra channels overfit the data-starved 773-well TCN, exactly as notes/27 warned.
-_TCN_DROP = 30        # trailing X cols to exclude = s_cols(3) + fcols(22) + lik_cols(5)
+_TCN_DROP = 31        # trailing X cols to exclude = s_cols(3) + fcols(22) + lik_cols(5) + spdip(1)
 try:
     import torch as _torch
     import torch.nn as _tnn
