@@ -122,3 +122,19 @@ dip integrates to 81 (diverges) — better than local-dip (110) but nowhere near
 
 **FINAL: three feature routes null/negative + the TCN route regressed. This round every avenue was tested
 empirically, not assumed. v29 / public 10.565 stands as the best; 10.565 is the honest reproducible ceiling.**
+
+## Round 3 (2026-07-31) — user asked "what have we not tried"; 5 more avenues, 1 WIN
+Pushed past the "we're done" call again. Five avenues, each pre-checked cheaply before any rebuild:
+
+| # | avenue | result | verdict |
+|---|---|---|---|
+| 1 | prefix bias+scale calibration | corr(known-slope, eval-slope)=0.04 | NEGATIVE. The per-well eval trend is NOT estimable from the known zone (known resid-slope std 0.073 vs eval 0.005, different regime); offset already captured by the Ridge anchor. Oracle-linear 5.87 needs eval truth we don't have. |
+| 3 | Huber loss (δ=10) on LGB+Cat | OOF −0.064 → **LB v31 10.596 (+0.031)** | REVERTED. Single-LGB OOF gain concentrated in one well-half; washed out / hurt in the full stack. Lesson: single-LGB OOF over-reads a loss change. |
+| **2** | **spatial-dip PF as a FEATURE** | **OOF −0.148, both halves (A −0.233, B −0.061), 12× seed noise** | **WIN (v32).** The tracker ROUTE that round 2 dismissed. A PF whose rate prior reverts toward the neighbour-well structural dip (`pf_spatial`, spw=0.5); decorrelated from local-dip trackers. NB the raw dip-rate FEATURE was null (round 2 A) — the PF *prediction* integrating the dip is what carries. Fusion/HMM route (dip_center) REGRESSED (+0.092) and was dropped. |
+| 4 | spatial neighbour definition | not run | queued |
+| 5 | whole-pipeline bagging | not run | queued |
+
+**Key reversal:** round 2 pre-judged A's tracker route as low-EV and skipped it. Round 3's cheap PF pre-check
+(spatial dip −2.29 on raw PF output, spw plateau 0.5–0.7) showed the tracker DOES use the dip well; the
+payoff came through the PF *as a decorrelated feature*, not the variance-gated HMM fusion. **v32 = v29 +
+spatial-dip PF feature (Huber dropped). LB PENDING.** grouped CV understates spatial → public may beat OOF.
