@@ -137,4 +137,9 @@ Pushed past the "we're done" call again. Five avenues, each pre-checked cheaply 
 **Key reversal:** round 2 pre-judged A's tracker route as low-EV and skipped it. Round 3's cheap PF pre-check
 (spatial dip −2.29 on raw PF output, spw plateau 0.5–0.7) showed the tracker DOES use the dip well; the
 payoff came through the PF *as a decorrelated feature*, not the variance-gated HMM fusion. **v32 = v29 +
-spatial-dip PF feature (Huber dropped). LB PENDING.** grouped CV understates spatial → public may beat OOF.
+spatial-dip PF feature (Huber dropped).**
+
+**✅ v32 PUBLIC LB = 10.424 (ref 55166231), from v29 10.565 = −0.141. NEW BEST.** OOF −0.148 → public
+−0.141: clean ~1:1 transfer (a decorrelated FEATURE tracks CV, unlike the blend knobs). Progression:
+10.699 → 10.565 → **10.424**. #2 was the strongest lever of the whole public-notebook effort, and it's the
+tracker route round 2 dismissed. Remaining: #4 (neighbour definition), #5 (bagging), now measured vs 10.424.
