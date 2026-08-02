@@ -5,7 +5,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-TCN-EE4C2C?logo=pytorch&logoColor=white)](#approach--anchor-then-residual-ensemble)
 [![LightGBM](https://img.shields.io/badge/LightGBM-%2B_CatBoost-2C7BB6)](#approach--anchor-then-residual-ensemble)
 [![Kaggle](https://img.shields.io/badge/Kaggle-Code_Competition-20BEFF?logo=kaggle&logoColor=white)](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction)
-[![Result](https://img.shields.io/badge/public_RMSE-10.57-success)](#result)
+[![Result](https://img.shields.io/badge/public_RMSE-10.42-success)](#result)
 [![Improvement](https://img.shields.io/badge/vs_baseline-−34%25-brightgreen)](#result)
 
 > Predicting **True Vertical Thickness (TVT)** along the un-logged section of horizontal oil wells by
@@ -25,8 +25,8 @@ rebuilt a competitor's claimed score to prove it was a mirage.
 | | RMSE (public LB) |
 |---|---|
 | Forward-fill baseline | 15.91 |
-| **Final submission** (kernel v29) | **10.57** |
-| Improvement | **−5.35 (−34%)** |
+| **Final submission** (kernel v32) | **10.42** |
+| Improvement | **−5.49 (−34%)** |
 
 I validated every one of those points on the real hidden leaderboard. The whole pipeline stays **honest and
 rules-compliant**: no target leakage, no train-only features at inference, licensed models only. The gap to
@@ -35,9 +35,10 @@ bundled precomputed submission files of unknown provenance. Neither transfers to
 not chase them. I tested that claim rather than assumed it (see [Verifying the ceiling](#verifying-the-ceiling)).
 
 Getting here meant being wrong in public. I twice declared an "honest ceiling" and twice broke it: first
-through **feature-poverty** (13.5 → 13.0), then through **architecture-poverty** (11.0 → 10.7). A final
-round of studying the top public solutions added the drift-stabilising **U=TVT+Z projection** (10.70 → 10.57).
-Each step came from questioning an assumption, not from tuning knobs.
+through **feature-poverty** (13.5 → 13.0), then through **architecture-poverty** (11.0 → 10.7). Then studying
+the top public solutions added two more levers: the drift-stabilising **U=TVT+Z projection** (10.70 → 10.57)
+and a **spatial-dip particle filter** that steers each well's tracker with its neighbours' structural dip
+(10.57 → 10.42). Each step came from questioning an assumption, not from tuning knobs.
 
 ---
 
@@ -67,7 +68,7 @@ flowchart LR
     subgraph ANCHOR["Level anchor + tracker fusion"]
         A["Ridge level anchor<br/>(per-well offset)"]
         H["2nd-order HMM<br/>(TVT, dip-rate)"]
-        P["Particle filters<br/>(bootstrap + 8-seed likelihood)"]
+        P["Particle filters<br/>(bootstrap + 8-seed likelihood<br/>+ neighbour spatial-dip prior)"]
     end
     subgraph FEAT["Feature families (target = TVT − anchor)"]
         R["Rich multi-offset<br/>GR-match grids"]
@@ -95,6 +96,7 @@ flowchart LR
 | TabICL foundation model | In-context tabular learner, offline | −0.02 |
 | **TCN sequence model** | Read the whole log as a *sequence*, not row-by-row | **−0.32** |
 | **U=TVT+Z projection** | Predict the smooth formation *surface*, subtract the exact trajectory | **−0.13** |
+| **Spatial-dip particle filter** | Steer the tracker with *neighbour wells'* structural dip | **−0.14** |
 
 ---
 
@@ -111,9 +113,9 @@ ffill 15.91 ──▶ level regression 15.33 ──▶ HMM fusion 14.24 ──�
      ▼
   + TCN sequence model 10.85 ──▶ tune blend 10.76 ──▶ stronger TCN 10.70
      │
-     │  studied the top public solutions — adopted one honest lever
+     │  studied the top public solutions — adopted two honest levers
      ▼
-  + U=TVT+Z projection 10.57  ◀── FINAL
+  + U=TVT+Z projection 10.57 ──▶ + spatial-dip particle filter 10.42  ◀── FINAL
 ```
 
 - **False ceiling #1 (feature-poverty).** I repeatedly concluded "13.5 is input-limited" from testing
@@ -166,10 +168,15 @@ the eval rows against known truth.
 
 It scored 16 to 80 pooled RMSE, never close to 7.5. The particle filter diverges because the gamma-ray
 likelihood (signal-to-noise ≈ 0.02) cannot anchor its momentum walk. The reported 7.159 turned out to be a
-**bundled precomputed CSV** the notebook loads in preference to running any physics. So the claimed headroom
-was an artifact, not a method I had missed. That single experiment saved days of chasing a mirage, and it
-confirmed 10.57 sits near the honest reproducible ceiling. The lesson I keep relearning here: reproduce a
-claimed ceiling before believing it.
+**bundled precomputed CSV** the notebook loads in preference to running any physics. So the claimed 7.5
+headroom was an artifact, not a method I had missed. That single experiment saved days of chasing a mirage.
+
+The reading of the public code still paid off twice, though. It handed me the U=TVT+Z projection, and it
+prompted the spatial-dip particle filter: since the neighbours' structural surface predicts each well's dip
+(correlation 0.48), I steer the tracker's rate prior toward it instead of the well's own noisy recent slope.
+That one feature moved 10.57 to 10.42, and it validated the same way the spatial features always do here,
+understated by grouped CV and confirmed only on the real board. The lesson I keep relearning: reproduce a
+claimed ceiling before believing it, and read the strong solutions even when their headline number is fake.
 
 ---
 

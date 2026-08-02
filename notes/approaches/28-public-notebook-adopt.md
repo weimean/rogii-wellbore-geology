@@ -142,4 +142,11 @@ spatial-dip PF feature (Huber dropped).**
 **✅ v32 PUBLIC LB = 10.424 (ref 55166231), from v29 10.565 = −0.141. NEW BEST.** OOF −0.148 → public
 −0.141: clean ~1:1 transfer (a decorrelated FEATURE tracks CV, unlike the blend knobs). Progression:
 10.699 → 10.565 → **10.424**. #2 was the strongest lever of the whole public-notebook effort, and it's the
-tracker route round 2 dismissed. Remaining: #4 (neighbour definition), #5 (bagging), now measured vs 10.424.
+tracker route round 2 dismissed.
+
+| #4 | neighbour def (k6/k15/3D-XYZ) | null | No variant reliably beats v32's k10-XY spdip; run4's k10 rebuild was ~0.07 weak, so k15's apparent edge is that artifact, not signal. |
+| #5 | whole-pipeline bagging | marginal | LGB 1→6-seed = −0.013 OOF, and the shipped kernel already seed-ensembles (3×LGB+Cat); most is captured. Not worth a submission. |
+
+**ROUND 3 FINAL: 1 win / 5. #2 spatial-dip PF feature → public 10.424 (NEW BEST, −0.141). #1/#3/#4/#5
+closed (negative / LB-regressed / null / marginal). Lesson reinforced: single-LGB OOF over-reads a loss
+change (#3 Huber), but a decorrelated spatial FEATURE transfers cleanly (#2). BEST = v32 / public 10.424.**
