@@ -144,7 +144,7 @@ spatial-dip PF feature (Huber dropped).**
 10.699 → 10.565 → **10.424**. #2 was the strongest lever of the whole public-notebook effort, and it's the
 tracker route round 2 dismissed.
 
-| #4 | neighbour def (k6/k15/3D-XYZ) | null | No variant reliably beats v32's k10-XY spdip; run4's k10 rebuild was ~0.07 weak, so k15's apparent edge is that artifact, not signal. |
+| #4 | neighbour def (k6/k15/3D-XYZ) | null (seed-noise) | Re-examined after user asked "why null". Clean decider (exact kernel pf_spatial, k10/k15 × pre/post-momentum rate-reversion): all variants 10.610–10.681, a 0.071 spread — but the 2-seed CONFIRM showed the IDENTICAL post-k15 feature moves 10.610→10.681 just from the LGB seed. So the single-LGB OOF seed noise here is ~0.07, ≥ any k effect → unresolvable, null. (Also surfaced: two pf builds differed by the pre/post-momentum reversion line; the gap between them is likewise within noise, so v32 is NOT suboptimal.) LESSON: single-LGB postproc'd OOF noise is ~0.07 (not the 0.011 one lucky pair suggested) — several sub-0.05 "signals" this session were near noise; only #2's −0.148 (12× noise, both halves) was real enough to transfer. Don't ship a v33 on a sub-noise wobble (cf. #3 Huber). |
 | #5 | whole-pipeline bagging | marginal | LGB 1→6-seed = −0.013 OOF, and the shipped kernel already seed-ensembles (3×LGB+Cat); most is captured. Not worth a submission. |
 
 **ROUND 3 FINAL: 1 win / 5. #2 spatial-dip PF feature → public 10.424 (NEW BEST, −0.141). #1/#3/#4/#5
