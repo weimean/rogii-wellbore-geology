@@ -1,23 +1,23 @@
-# ROGII — Wellbore Geology Prediction
+# ROGII: Wellbore Geology Prediction
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.11](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](pyproject.toml)
-[![PyTorch](https://img.shields.io/badge/PyTorch-TCN-EE4C2C?logo=pytorch&logoColor=white)](#approach--anchor-then-residual-ensemble)
-[![LightGBM](https://img.shields.io/badge/LightGBM-%2B_CatBoost-2C7BB6)](#approach--anchor-then-residual-ensemble)
+[![PyTorch](https://img.shields.io/badge/PyTorch-TCN-EE4C2C?logo=pytorch&logoColor=white)](#approach-anchor-then-residual-ensemble)
+[![LightGBM](https://img.shields.io/badge/LightGBM-%2B_CatBoost-2C7BB6)](#approach-anchor-then-residual-ensemble)
 [![Kaggle](https://img.shields.io/badge/Kaggle-Code_Competition-20BEFF?logo=kaggle&logoColor=white)](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction)
 [![Result](https://img.shields.io/badge/private_RMSE-9.673-success)](#result)
 [![Rank](https://img.shields.io/badge/rank-3151%2F6191-blue)](#result)
 [![Improvement](https://img.shields.io/badge/vs_baseline-−34%25-brightgreen)](#result)
 
 > Predicting **True Vertical Thickness (TVT)** along the un-logged section of horizontal oil wells by
-> correlating gamma-ray logs — a sequence-alignment problem tackled with an anchor-then-residual ensemble
+> correlating gamma-ray logs. A sequence-alignment problem tackled with an anchor-then-residual ensemble
 > that ends in a **learned "holistic reading"** of the log.
 
 **Kaggle Featured Code Competition** · metric **RMSE** · notebook-only, ≤ 9 h, internet disabled.
 [Competition page](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction)
 
-📖 **[Read the case study →](WRITEUP.md)** — the reasoning, the two false ceilings, and the round where I
-rebuilt a competitor's claimed score to prove it was a mirage.
+📖 **[Read the case study →](WRITEUP.md)**: the reasoning, the two false ceilings, the competitor claim I
+rebuilt to prove it was a mirage, and the model class the winners used that I missed.
 
 ---
 
@@ -27,28 +27,29 @@ rebuilt a competitor's claimed score to prove it was a mirage.
 |---|---|
 | Forward-fill baseline | 15.91 (public) |
 | Best submission (kernel v32) | 10.42 (public) |
-| **Final standing** — private LB | **9.673 · rank 3151 / 6191 (top 50.9%)** |
+| **Final standing** (private LB) | **9.673 · rank 3151 / 6191 (top 50.9%)** |
 
-The competition closed 2026-08-05. On the private board the pipeline scored **9.673**, moving **up 841 places**
-from its public rank (3992 → 3151): trusting reproduction and grouped cross-validation over the noisy public LB
-paid off in the shakeup — teams that overfit the public split fell, this one rose. The counted submission was
-the U=TVT+Z projection (v29), not the last public-best (v32); Kaggle keeps the better *private* score among your
-two best *public* subs, and the final public lever turned out to be public overfit worth about +0.05 on private.
+The competition closed 2026-08-05. On the private board the pipeline scored **9.673** and rose **841 places**
+from its public rank, 3992 to 3151. Trusting reproduction and grouped cross-validation over the noisy public LB
+paid off in the shakeup: teams that overfit the public split fell, this one rose. The counted submission was the
+U=TVT+Z projection (v29), not the last public-best (v32). Kaggle keeps the better *private* score across your two
+best *public* entries, and the final public lever turned out to be public overfit worth about 0.05 on private.
 Full breakdown in [notes/CONCLUSION.md](notes/CONCLUSION.md).
 
 I validated every point along the way on the real leaderboard. The whole pipeline stays **honest and
 rules-compliant**: no target leakage, no train-only features at inference, licensed models only.
 
-The ~4-RMSE gap to the very top (private ~5.6) turned out **not** to be a leak — the winners' post-deadline
-writeups show it was a **model class I never built**: reframe geosteering as **2D image alignment** (a GR-match
-heatmap, x = position along the well, y = candidate TVT) and let a **U-Net / CNN pick the correct ridge**. That
-paradigm reaches ~4.6–5.3 CV; a tabular GBM/particle-filter stack like mine saturates near 9–10 no matter the
-features. There was no leak (the winners scored *worse* on public than private, and one writeup is titled
-"corr(public, private) = −0.04"). My mid-competition reproduction was half-right — it correctly caught one fake
-"7.159" bundled-CSV claim — but I over-generalized that into "the whole gap is a leak," which the reveal
-disproved. The honest lesson: **when a gap persists, suspect a missing model class before concluding "leak."**
-My particle filter and neighbour-surface feature were sound — the 1st-place solution uses both — but as *input
-channels* to the alignment net, not as the model itself. Details in [notes/CONCLUSION.md](notes/CONCLUSION.md).
+The 4-RMSE gap to the very top (private ~5.6) turned out **not** to be a leak. The winners' post-deadline
+writeups show it was a **model class I never built**. They reframe geosteering as **2D image alignment**: render
+the GR-match grid as an image, position on one axis and candidate TVT on the other, then let a **U-Net pick the
+correct ridge**. That paradigm reaches 4.6 to 5.3 in cross-validation. A tabular gradient-boosted stack like
+mine saturates near 9 to 10 no matter what features I pour in. Nothing leaked. The winners scored *worse* on
+public than private, and one writeup measured the public-to-private rank correlation at −0.04. My
+mid-competition reproduction caught one genuinely fake "7.159" bundled-CSV claim, then I over-generalized it
+into "the whole gap is a leak," which the reveal disproved. The lesson I keep: **when a gap refuses to close,
+suspect a missing model class before you blame a leak.** My particle filter and neighbour-surface feature were
+sound, and the 1st-place solution uses both, as *input channels* to its alignment network rather than the model
+itself. Details in [notes/CONCLUSION.md](notes/CONCLUSION.md).
 
 Getting here meant being wrong in public. I twice declared an "honest ceiling" and twice broke it: first
 through **feature-poverty** (13.5 → 13.0), then through **architecture-poverty** (11.0 → 10.7). Then studying
@@ -61,18 +62,18 @@ and a **spatial-dip particle filter** that steers each well's tracker with its n
 ## The problem
 
 Each horizontal well provides a **gamma-ray (GR) log** sampled along measured depth, plus the trajectory
-(`X, Y, Z`). A separate vertical **typewell** gives the GR signature as a function of TVT. The target — TVT,
-the bit's geological position — is known along the early ("known") part of the well and **missing (`NaN`)
-along a long evaluation zone** (~74% of the well on the median).
+(`X, Y, Z`). A separate vertical **typewell** gives the GR signature as a function of TVT. The target, TVT, is
+the bit's geological position. It is known along the early ("known") part of the well and **missing (`NaN`)
+along a long evaluation zone**, about 74% of the well on the median.
 
 The horizontal GR is a stretched, shifted copy of the typewell GR, so recovering TVT is fundamentally
-**log correlation / sequence alignment** — the automated analogue of what a geosteering geologist does by
-eye. The catch: the GR signal is weakly discriminative (self-correlation ≈ 0.65 at the true depth), so
+**log correlation / sequence alignment**, the automated analogue of what a geosteering geologist does by eye.
+The catch: the GR signal is weakly discriminative (self-correlation ≈ 0.65 at the true depth), so
 point-by-point matching barely beats forward-fill. The signal lives in the *structure*, not the points.
 
 ---
 
-## Approach — anchor-then-residual ensemble
+## Approach: anchor-then-residual ensemble
 
 The design principle throughout: **ensemble diversity must come from a genuinely different algorithm, not a
 restatement.** A per-well level *anchor* pins the absolute depth; a fusion of physics-style *trackers*
@@ -140,17 +141,18 @@ ffill 15.91 ──▶ level regression 15.33 ──▶ HMM fusion 14.24 ──�
   one-feature-at-a-time probes.**
 
 - **The breakthrough (spatial, −1.85).** TVT is deterministic in the per-row structural formation surfaces,
-  which are train-only — but they're globally-consistent absolute depths, so they can be *imputed at a
+  which are train-only. They are globally-consistent absolute depths, though, so they can be *imputed at a
   well's location from its neighbours* (KNN, self-excluded; test-legal). This exposed a validation trap:
   **grouped CV understates offset-well features ~20×**, because it strips each well's pad-neighbours into
   the held-out fold, while the scored test wells genuinely *are* offset wells to the train set. Trust the
   public LB, not CV, for anything spatial.
 
 - **False ceiling #2 (architecture-poverty).** After closing seven more levers I declared 11.0 the honest
-  ceiling. Wrong again — the gap was *architectural*: every model predicted each row **independently**,
-  while a geologist reads the whole log **holistically**. A **TCN** (dilated temporal convolution over the
-  eval sequence) is the learned version of that holistic reading, and it added **−0.32**. Grouped CV
-  understated it 5× (−0.03 CV → −0.17 public), the same signature as the spatial features.
+  ceiling. Wrong again, and this time the gap was *architectural*: every model predicted each row
+  **independently**, while a geologist reads the whole log **holistically**. A **TCN** (dilated temporal
+  convolution over the eval sequence) is the learned version of that holistic reading, and it added
+  **−0.32**. Grouped CV understated it 5× (−0.03 CV → −0.17 public), the same signature as the spatial
+  features.
 
 ---
 
@@ -158,18 +160,18 @@ ffill 15.91 ──▶ level regression 15.33 ──▶ HMM fusion 14.24 ──�
 
 The scores are only worth as much as the discipline behind them. A few practices did the heavy lifting:
 
-- **Group-aware validation.** Always `GroupKFold` on `WELLNAME` — rows from one well never straddle the
+- **Group-aware validation.** Always `GroupKFold` on `WELLNAME`, so rows from one well never straddle the
   split. Verified that CV and the public LB agree for row-independent features (leak-probe: public 13.604 ≡
   phase-2 CV 13.601).
-- **Matching the validator to the knob.** Grouped CV *understates* spatial/sequence features (→ trust public)
-  but *overstates* blend-weight tuning (four reverts where CV improved and public regressed). Knowing which
-  is which prevented chasing mirages.
+- **Matching the validator to the knob.** Grouped CV *understates* spatial and sequence features (so trust
+  public) but *overstates* blend-weight tuning (four reverts where CV improved and public regressed). Knowing
+  which is which prevented chasing mirages.
 - **Error bars before conclusions.** The final sequence-model sweeps run the *same config twice* to measure
-  seed variance (~0.05 RMSE) — larger than any config effect being tested. This caught an earlier "clean"
+  seed variance, about 0.05 RMSE, larger than any config effect being tested. This caught an earlier "clean"
   sweep whose rankings were pure CPU-contention artifact.
 - **Honest negatives, recorded.** ~15 levers were tested and *rejected* with the measurement that killed
-  them (a transformer that merely restated the TCN at corr 0.9997; a geometry prior that was geologically
-  false; "raw GR" that lost to engineered features). The negatives are as documented as the wins — see
+  them: a transformer that merely restated the TCN at corr 0.9997, a geometry prior that was geologically
+  false, "raw GR" that lost to engineered features. The negatives are as documented as the wins, in
   [`notes/approaches/`](notes/approaches/).
 - **Leak & license hygiene.** A train-only `Geology` feature that looked like a −0.53 CV win was caught as
   leakage (absent at inference) only by the real LB, and reverted. TabPFN was excluded on license grounds;
@@ -194,10 +196,10 @@ That one feature moved 10.57 to 10.42, and it validated the same way the spatial
 understated by grouped CV and confirmed only on the real board. The lesson I keep relearning: reproduce a
 claimed ceiling before believing it, and read the strong solutions even when their headline number is fake.
 
-**One caveat the reveal added.** Catching that fake 7.5 was right, but I let it harden into a broader belief —
+**One caveat the reveal added.** Catching that fake 7.5 was right, but I let it harden into a broader belief:
 that the *entire* gap to the top was a leak or artifact I couldn't reach honestly. When the winners posted
 their writeups, that turned out to be wrong. The real top (private ~5.6) was honest, and it came from a model
-class I never built: treat the GR-match grid as an **image** and let a U-Net pick the ridge, rather than
+class I never built. They treat the GR-match grid as an **image** and let a U-Net pick the ridge, rather than
 feeding the grid to gradient-boosted trees. Disproving a fake sub-claim did not entitle me to a verdict on the
 whole gap. The sharper lesson: **when a gap refuses to close, suspect a missing model class before you settle
 on "leak."**
@@ -212,18 +214,19 @@ kernel/         self-contained Kaggle submission script + metadata             (
 tools/          validation probes & experiment harnesses (one per hypothesis)
 _cache_*.py     feature-cache builders for the local experiment rig
 notes/
-  CONCLUSION.md       durable final record — recipe, full lever ledger, principles
-  approaches/NN-*.md  per-lever narrative: idea → validation → verdict (00–27)
-experiments/    log.md — terse per-run ledger
+  CONCLUSION.md       durable final record: recipe, full lever ledger, principles
+  approaches/NN-*.md  per-lever narrative: idea → validation → verdict (00–28)
+experiments/    log.md, a terse per-run ledger
 configs/        one YAML per experiment
-data/           competition data (gitignored — redistribution is against comp rules)
+data/           competition data (gitignored; redistribution is against comp rules)
 ```
 
 **Best places to read the reasoning:** [`notes/CONCLUSION.md`](notes/CONCLUSION.md) for the whole story in
 one file, [`notes/approaches/27-sequence-model.md`](notes/approaches/27-sequence-model.md) for the
 sequence-model breakthrough that broke the second ceiling, and
 [`notes/approaches/28-public-notebook-adopt.md`](notes/approaches/28-public-notebook-adopt.md) for the study
-of the top public solutions that added the projection lever and debunked the claimed 7.5 ceiling.
+of the top public solutions that added the projection lever, and the post-reveal breakdown of how the winners
+reached ~5.6 with a 2D image-alignment model.
 
 ---
 
@@ -237,7 +240,7 @@ kaggle competitions download -c rogii-wellbore-geology-prediction -p data/raw &&
 uv run python -u tools/reproduce_cv.py         # regenerate the CV progression table (~15 min)
 ```
 
-**Submission** (notebook-only code competition — direct CSV upload is rejected): the entire pipeline is
+**Submission** (notebook-only code competition, so direct CSV upload is rejected): the entire pipeline is
 mirrored into one self-contained script in [`kernel/`](kernel/). Push and run with:
 
 ```bash
@@ -245,8 +248,8 @@ kaggle kernels push -p kernel/                 # uploads + runs on Kaggle (~1.5 
 # then submit the resulting version via the Kaggle API
 ```
 
-The kernel loads two offline dataset dependencies (TabICL weights/wheels) and trains everything — GBMs, MLP,
-TabICL, and the torch TCN — inside the 9-hour, internet-disabled sandbox.
+The kernel loads two offline dataset dependencies (TabICL weights/wheels) and trains everything (GBMs, MLP,
+TabICL, and the torch TCN) inside the 9-hour, internet-disabled sandbox.
 
 ---
 
