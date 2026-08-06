@@ -17,8 +17,9 @@ five (Huber loss looked good on single-LGB OOF but regressed on the LB; prefix c
 **On the gap to the LB top (~4.7):** I reproduced the one runnable public "honest" pipeline (PF + beam +
 selector + projection) on my own 773 labeled wells — it scores 16 to 80 pooled, never near the claimed 7.5,
 because the particle filter diverges on the weak GR signal (SNR≈0.02). The 7.159 is a bundled precomputed CSV,
-not physics output. So the claimed 3-RMSE headroom is an artifact; **10.424 is near the honest reproducible
-ceiling**, and the remaining gap is the well-ID leak plus bundled artifacts that do not transfer to private.
+not physics output. So that specific self-reported table was an artifact — **but the conclusion I drew from it,
+that the whole gap is a "leak," was wrong** (corrected below in FINAL STANDING after the winners' writeups
+appeared: the real ~4-RMSE gap was a 2D image-alignment U-Net model class, honest and reachable, not a leak).
 (The recurring lesson: never declare a ceiling from probes or self-reports — break it with a new algorithm,
 or reproduce it before believing it. 13.52 was feature-poverty, 11.020 was architecture-poverty, 7.5 was a mirage.)
 
@@ -44,9 +45,18 @@ Two things this confirms empirically:
 1. **The round-3 "win" was public overfit.** The spatial-dip PF (v32) beat public by −0.141 but *cost* ~0.05 on
    private (9.673 → 9.725) — squarely inside the ~0.07 single-LGB seed-noise band we'd identified. The largest
    sub-0.07-clearing public signal still didn't transfer. The two-submission safety net (v29) is what saved us.
-2. **The honest-ceiling read was right.** Top team hit **5.639 private**; our honest reproducible pipeline
-   bottomed at ~9.67. That ~4-RMSE gap was the leak/artifact edge, not a modeling lever we failed to tune —
-   exactly what the reproduction study concluded before the reveal.
+2. **The honest-ceiling read was right for the *tabular* paradigm — but the gap was not a leak.** Our GBM+PF
+   program bottomed at ~9.67, and no amount of feature work moves that. POST-REVEAL, though, the winners'
+   writeups show the ~4-RMSE gap to the top (private **5.639**) was **a model class we never tried, not a
+   leak**: reframe geosteering as **2D image alignment** (a GR-match heatmap, x = position, y = candidate TVT)
+   and let a **U-Net / CNN pick the correct ridge**, outputting a per-column distribution over TVT. That class
+   hits ~4.6–5.3 CV. Evidence there was no leak: winners scored *worse* on public than private (Ruby
+   5.98 → 5.64); a published writeup is titled *"corr(public, private) = −0.04"*; the 1st-place author
+   investigated the discrepancy and found only a noisy 50-well public split. My 07-29 reproduction was *half*
+   right — the "7.159 = bundled CSV" claim was genuinely fake — but I over-generalized it into "the whole gap
+   is a leak," which was wrong. Our own particle filter and spatial surface `ΔTVT = aΔX + bΔY − ΔZ` both appear
+   in the 1st-place solution — as *one channel* into the alignment net, never as the model. See notes/28.
+   **Lesson: when a gap persists, suspect a missing model class before concluding "leak."**
 
 ---
 

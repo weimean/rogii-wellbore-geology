@@ -150,3 +150,67 @@ tracker route round 2 dismissed.
 **ROUND 3 FINAL: 1 win / 5. #2 spatial-dip PF feature → public 10.424 (NEW BEST, −0.141). #1/#3/#4/#5
 closed (negative / LB-regressed / null / marginal). Lesson reinforced: single-LGB OOF over-reads a loss
 change (#3 Huber), but a decorrelated spatial FEATURE transfers cleanly (#2). BEST = v32 / public 10.424.**
+
+---
+
+## POST-REVEAL POST-MORTEM (2026-08-06, competition closed 08-05)
+
+**Final standing: private RMSE 9.673, rank 3151/6191 (top 50.9%).** Public 10.424 → rank 3992 (top 64.5%);
+the private shakeup moved us UP 841 places. Counted sub = v29 (U=TVT+Z projection, private 9.673), not the
+public-best v32 (9.725) — Kaggle kept the better private among the two best public subs, and the v32
+spatial-dip PF turned out to be public overfit (+0.05 private, inside the ~0.07 seed-noise band). Full
+private breakdown table in notes/CONCLUSION.md "FINAL STANDING".
+
+### How the winners got 4-5 RMSE over us — read their writeups
+
+**No leak. We lost on model class.** Every top solution reframes geosteering as **2D image alignment** and
+solves it with a deep CNN/U-Net, not tabular regression. Our entire GBM+PF+NCC program saturates ~9-10 RMSE
+regardless of features; the image-alignment nets hit ~4.6-5.3 CV.
+
+The construction (common to 1st & 18th): build a 2D image, x = position along the well, y = candidate TVT,
+pixel = GR-match score (lateral GR vs typewell). The true path and all the self-similar "false ridges" show
+up as parallel lines. A U-Net outputs a per-column probability distribution over vertical position (CE vs a
+Gaussian soft-label), then expectation → TVT. **"Pick the right ridge, not per-step precision"** is the whole
+game. Anchor the vertical axis to a reference (last-visible TVT / a straight chord) so the range shrinks and
+resolution goes where it matters — the deep-learning-native form of our own "predict the offset not the
+wiggle" memo. **Massive synthetic augmentation** (typewell depth-shifts, geology swaps, GR affine, Z-shift
+preserving TVT+Z, reverse traversal) with a calibrated noise model beats the 773-well limit.
+
+| Place | Team | Public | Private | CV | Method |
+|-------|------|-------:|--------:|---:|--------|
+| 1st | Ruby | 5.980 | **5.639** | 4.627 | ConvNeXt-S U-Net on 345×400 GR-match grid (±100 ft, 0.5 ft); CE on smoothed alignment + Huber on expected path + GR-gap penalty; **PF injected as a 2D heatmap channel** (standalone PF ~7.4 CV); XY-neighbour surface ΔTVT=aΔX+bΔY−ΔZ (kept on CV despite hurting public); heavy aug |
+| 3rd | tereka & Takoi | 6.043 | 5.836 | 5.288 | Physics+NN hybrid: **2nd-order HMM** (state = TVT, formation rate, GR bias, ref-family; Student-t; fwd-bwd) + PF generate candidate trajectories → dilated-TCN+attention correction → learned **SoftMax gate** fuses 5 candidates per row. #1 private lever = **sibling-lateral reference GR** (GR from wells sharing the typewell, finely binned + self-reference from the known prefix) |
+| 18th | yu4u | 6.249 | 6.411 | 4.91 (ens) | 5-channel well image (GR-match, last-value band, prefix truth, dip sin/cos), chord-relative axis 0.5 ft/bin; U-Net heatmap head (EffNetV2-L/ConvNeXt-S) + DINOv3 ViT detection head for decorrelation; ensemble by error-decorrelation |
+
+**Pack ceiling = us.** The top *public notebook* (`romantamrazov/rogii-super-solution`, mislabeled "top-3")
+is the same LGB+CatBoost + Numba beam + multi-scale NCC + PF + formation-plane-KNN family we already run — the
+tabular ceiling sits right at ~9-10 where we landed. The "7159" notebooks are the bundled-CSV artifacts.
+
+### Verdict: it was a missed model class, not a leak — the "leak" read is FALSIFIED
+
+- Winners scored **worse on public than private** (Ruby 5.98 → 5.64; tereka 6.04 → 5.84). A leak inflates
+  public, not the reverse.
+- A published writeup is titled **"corr(public, private) = −0.04"** — the 50-well public set was noise.
+- Ruby investigated the public/private discrepancy on his XY-neighbour feature, found no neighbourhood
+  statistic explained it, and concluded "inconsistent labels" in the small public set — **no leak**.
+- Everyone used honest GroupKFold-by-well OOF; tereka details a nested-OOF protocol.
+
+Our 07-29 reproduction memo was *half* right (the "7.159 = bundled CSV" claim was genuinely fake) but drew the
+wrong lesson: the real ~5.6 ceiling was honest and reachable by a different model class, not a leak. Falsifying
+a fake sub-claim did not license a verdict on the whole gap.
+
+### What we'd do differently (ranked by expected impact)
+
+1. **Reframe as 2D image alignment + train a U-Net/CNN ridge-picker on the GR-match heatmap** — the whole
+   ballgame, ~4 RMSE. We had every ingredient (GR-match grids, anchor-relative targets, the PF) and kept
+   feeding them to GBMs instead of building the image.
+2. **Anchor the prediction axis to a chord / last-visible TVT and predict the residual at high resolution**
+   (yu4u's "single biggest lever" = our "predict the offset" as a coordinate system).
+3. **Synthetic augmentation with a calibrated noise model** (773 wells is too few for a net without it).
+4. **Sibling-lateral reference GR** (aggregate GR from wells sharing a typewell + self-reference from the
+   known prefix) — 3rd place's #1 private lever, a direct upgrade to the HMM/PF track we already had.
+5. **Trust fold-safe CV over public LB; select ensemble members by error-decorrelation.** We spent rounds
+   chasing ±0.1 public deltas on a split whose private correlation was ~0.
+
+Our best assets weren't wasted: the particle filter and the ΔTVT=aΔX+bΔY−ΔZ surface both appear in the
+1st-place solution — but as **one channel** into a deep alignment model, not as the model itself.

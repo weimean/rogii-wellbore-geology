@@ -37,10 +37,18 @@ two best *public* subs, and the final public lever turned out to be public overf
 Full breakdown in [notes/CONCLUSION.md](notes/CONCLUSION.md).
 
 I validated every point along the way on the real leaderboard. The whole pipeline stays **honest and
-rules-compliant**: no target leakage, no train-only features at inference, licensed models only. The ~4-RMSE gap
-to the very top (private ~5.6) comes from a train/test well-ID *leak* the leading public notebooks exploit, plus
-bundled precomputed submission files of unknown provenance. Neither transfers to the private board, so I did
-not chase them. I tested that claim rather than assumed it (see [Verifying the ceiling](#verifying-the-ceiling)).
+rules-compliant**: no target leakage, no train-only features at inference, licensed models only.
+
+The ~4-RMSE gap to the very top (private ~5.6) turned out **not** to be a leak — the winners' post-deadline
+writeups show it was a **model class I never built**: reframe geosteering as **2D image alignment** (a GR-match
+heatmap, x = position along the well, y = candidate TVT) and let a **U-Net / CNN pick the correct ridge**. That
+paradigm reaches ~4.6–5.3 CV; a tabular GBM/particle-filter stack like mine saturates near 9–10 no matter the
+features. There was no leak (the winners scored *worse* on public than private, and one writeup is titled
+"corr(public, private) = −0.04"). My mid-competition reproduction was half-right — it correctly caught one fake
+"7.159" bundled-CSV claim — but I over-generalized that into "the whole gap is a leak," which the reveal
+disproved. The honest lesson: **when a gap persists, suspect a missing model class before concluding "leak."**
+My particle filter and neighbour-surface feature were sound — the 1st-place solution uses both — but as *input
+channels* to the alignment net, not as the model itself. Details in [notes/CONCLUSION.md](notes/CONCLUSION.md).
 
 Getting here meant being wrong in public. I twice declared an "honest ceiling" and twice broke it: first
 through **feature-poverty** (13.5 → 13.0), then through **architecture-poverty** (11.0 → 10.7). Then studying
@@ -185,6 +193,14 @@ prompted the spatial-dip particle filter: since the neighbours' structural surfa
 That one feature moved 10.57 to 10.42, and it validated the same way the spatial features always do here,
 understated by grouped CV and confirmed only on the real board. The lesson I keep relearning: reproduce a
 claimed ceiling before believing it, and read the strong solutions even when their headline number is fake.
+
+**One caveat the reveal added.** Catching that fake 7.5 was right, but I let it harden into a broader belief —
+that the *entire* gap to the top was a leak or artifact I couldn't reach honestly. When the winners posted
+their writeups, that turned out to be wrong. The real top (private ~5.6) was honest, and it came from a model
+class I never built: treat the GR-match grid as an **image** and let a U-Net pick the ridge, rather than
+feeding the grid to gradient-boosted trees. Disproving a fake sub-claim did not entitle me to a verdict on the
+whole gap. The sharper lesson: **when a gap refuses to close, suspect a missing model class before you settle
+on "leak."**
 
 ---
 
