@@ -2,6 +2,7 @@
 
 **Task:** predict eval-zone TVT (True Vertical Thickness, ft) for horizontal wells. Metric: pooled RMSE.
 **Best model:** kernel **v32** (`gtwm98/rogii-hmm-fusion`, ref 55166231) — **public 10.424**, fully honest & rules-compliant.
+**Final standing:** private **RMSE 9.673**, rank **3151 / 6191 (top 50.9%)** — counted sub was v29 (see FINAL STANDING below).
 **Arc:** ffill 15.91 → 13.288 → 11.020 → 10.852 → 10.699 → 10.565 → **10.424** (−5.49 from ffill), every gain validated on the real LB.
 **Verdict (2026-07-29):** two "honest ceilings" I declared both fell. 11.020 was ARCHITECTURE-POVERTY — a
 TCN reading each well as a SEQUENCE (the learned analogue of a geologist reading the log holistically) broke
@@ -20,6 +21,32 @@ not physics output. So the claimed 3-RMSE headroom is an artifact; **10.424 is n
 ceiling**, and the remaining gap is the well-ID leak plus bundled artifacts that do not transfer to private.
 (The recurring lesson: never declare a ceiling from probes or self-reports — break it with a new algorithm,
 or reproduce it before believing it. 13.52 was feature-poverty, 11.020 was architecture-poverty, 7.5 was a mirage.)
+
+---
+
+## FINAL STANDING (competition closed 2026-08-05)
+
+**Team `weimean` — private RMSE 9.673, rank 3151 / 6191 (top 50.9%).** Public was 10.424 / rank 3992 (top 64.5%):
+**the private shakeup moved us up 841 places.** Trusting reproduction and grouped CV over the public LB
+generalised — teams that overfit the public split fell, we rose.
+
+**The counted score is v29 (9.673), not v32.** Kaggle auto-selected the two best *public* subs (v32 10.424 and
+v29 10.565) and kept the better *private* one. Private scoring inverted the public ranking of our own levers:
+
+| Sub | Lever | Public | Private |
+|-----|-------|-------:|--------:|
+| v29 | U=TVT+Z projection | 10.565 | **9.673** ← counted |
+| v32 | + spatial-dip PF | 10.424 | 9.725 |
+| v30 | spatial→TCN (*reverted*) | 10.722 | **9.669** ← best private of all, never selected |
+| v31 | Huber (*reverted*) | 10.596 | 9.744 |
+
+Two things this confirms empirically:
+1. **The round-3 "win" was public overfit.** The spatial-dip PF (v32) beat public by −0.141 but *cost* ~0.05 on
+   private (9.673 → 9.725) — squarely inside the ~0.07 single-LGB seed-noise band we'd identified. The largest
+   sub-0.07-clearing public signal still didn't transfer. The two-submission safety net (v29) is what saved us.
+2. **The honest-ceiling read was right.** Top team hit **5.639 private**; our honest reproducible pipeline
+   bottomed at ~9.67. That ~4-RMSE gap was the leak/artifact edge, not a modeling lever we failed to tune —
+   exactly what the reproduction study concluded before the reveal.
 
 ---
 

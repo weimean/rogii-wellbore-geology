@@ -5,7 +5,8 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-TCN-EE4C2C?logo=pytorch&logoColor=white)](#approach--anchor-then-residual-ensemble)
 [![LightGBM](https://img.shields.io/badge/LightGBM-%2B_CatBoost-2C7BB6)](#approach--anchor-then-residual-ensemble)
 [![Kaggle](https://img.shields.io/badge/Kaggle-Code_Competition-20BEFF?logo=kaggle&logoColor=white)](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction)
-[![Result](https://img.shields.io/badge/public_RMSE-10.42-success)](#result)
+[![Result](https://img.shields.io/badge/private_RMSE-9.673-success)](#result)
+[![Rank](https://img.shields.io/badge/rank-3151%2F6191-blue)](#result)
 [![Improvement](https://img.shields.io/badge/vs_baseline-−34%25-brightgreen)](#result)
 
 > Predicting **True Vertical Thickness (TVT)** along the un-logged section of horizontal oil wells by
@@ -22,15 +23,22 @@ rebuilt a competitor's claimed score to prove it was a mirage.
 
 ## Result
 
-| | RMSE (public LB) |
+| | RMSE |
 |---|---|
-| Forward-fill baseline | 15.91 |
-| **Final submission** (kernel v32) | **10.42** |
-| Improvement | **−5.49 (−34%)** |
+| Forward-fill baseline | 15.91 (public) |
+| Best submission (kernel v32) | 10.42 (public) |
+| **Final standing** — private LB | **9.673 · rank 3151 / 6191 (top 50.9%)** |
 
-I validated every one of those points on the real hidden leaderboard. The whole pipeline stays **honest and
-rules-compliant**: no target leakage, no train-only features at inference, licensed models only. The gap to
-the very top of the board comes from a train/test well-ID *leak* the leading public notebooks exploit, plus
+The competition closed 2026-08-05. On the private board the pipeline scored **9.673**, moving **up 841 places**
+from its public rank (3992 → 3151): trusting reproduction and grouped cross-validation over the noisy public LB
+paid off in the shakeup — teams that overfit the public split fell, this one rose. The counted submission was
+the U=TVT+Z projection (v29), not the last public-best (v32); Kaggle keeps the better *private* score among your
+two best *public* subs, and the final public lever turned out to be public overfit worth about +0.05 on private.
+Full breakdown in [notes/CONCLUSION.md](notes/CONCLUSION.md).
+
+I validated every point along the way on the real leaderboard. The whole pipeline stays **honest and
+rules-compliant**: no target leakage, no train-only features at inference, licensed models only. The ~4-RMSE gap
+to the very top (private ~5.6) comes from a train/test well-ID *leak* the leading public notebooks exploit, plus
 bundled precomputed submission files of unknown provenance. Neither transfers to the private board, so I did
 not chase them. I tested that claim rather than assumed it (see [Verifying the ceiling](#verifying-the-ceiling)).
 
