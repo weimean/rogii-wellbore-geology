@@ -4,8 +4,8 @@ A case study from the ROGII Wellbore Geology competition on Kaggle. Every score 
 hidden leaderboard, and the pipeline breaks no competition rules: no target leakage, no train-only features at
 inference, licensed models only.
 
-Final result: **9.673 RMSE on the private leaderboard, rank 3151 of 6191, top 51%**, down from forward-fill's
-15.91. The private shakeup moved the solution up 841 places from where it sat on the public board. That gain is
+Final result: **9.673 RMSE on the private leaderboard, rank 3116 of 6125, top 51%**, down from forward-fill's
+15.91. The private shakeup moved the solution up 828 places from where it sat on the public board. That gain is
 the part I am proudest of, and it is also where the real lesson lives, so this writeup spends most of its time
 on the reasoning, the traps, and the things I tried that failed.
 
@@ -118,7 +118,7 @@ margin, which is why it transferred and Huber did not.
 The competition closed and the private board settled the questions the public board could not. Two things came
 out of it.
 
-First, the discipline paid off. The solution rose 841 places from public to private. A public board built on 50
+First, the discipline paid off. The solution rose 828 places from public to private. A public board built on 50
 wells was almost pure noise; one team's writeup measured the public-to-private rank correlation at −0.04.
 Teams that tuned to that noise fell, and trusting group-aware cross-validation over it is what held up when the
 real test wells arrived. The two-submission safety net mattered too. Kaggle kept my better private score across
