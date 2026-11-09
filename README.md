@@ -6,7 +6,7 @@
 [![LightGBM](https://img.shields.io/badge/LightGBM-%2B_CatBoost-2C7BB6)](#approach-anchor-then-residual-ensemble)
 [![Kaggle](https://img.shields.io/badge/Kaggle-Code_Competition-20BEFF?logo=kaggle&logoColor=white)](https://www.kaggle.com/competitions/rogii-wellbore-geology-prediction)
 [![Result](https://img.shields.io/badge/private_RMSE-9.673-success)](#result)
-[![Rank](https://img.shields.io/badge/rank-3151%2F6191-blue)](#result)
+[![Rank](https://img.shields.io/badge/rank-3116%2F6125-blue)](#result)
 [![Improvement](https://img.shields.io/badge/vs_baseline-−34%25-brightgreen)](#result)
 
 > Predicting **True Vertical Thickness (TVT)** along the un-logged section of horizontal oil wells by
@@ -27,10 +27,10 @@ rebuilt to prove it was a mirage, and the model class the winners used that I mi
 |---|---|
 | Forward-fill baseline | 15.91 (public) |
 | Best submission (kernel v32) | 10.42 (public) |
-| **Final standing** (private LB) | **9.673 · rank 3151 / 6191 (top 50.9%)** |
+| **Final standing** (private LB) | **9.673 · rank 3116 / 6125 (top 50.9%)** |
 
-The competition closed 2026-08-05. On the private board the pipeline scored **9.673** and rose **841 places**
-from its public rank, 3992 to 3151. Trusting reproduction and grouped cross-validation over the noisy public LB
+The competition closed 2026-08-05. On the private board the pipeline scored **9.673** and rose **828 places**
+from its public rank, 3944 to 3116. Trusting reproduction and grouped cross-validation over the noisy public LB
 paid off in the shakeup: teams that overfit the public split fell, this one rose. The counted submission was the
 U=TVT+Z projection (v29), not the last public-best (v32). Kaggle keeps the better *private* score across your two
 best *public* entries, and the final public lever turned out to be public overfit worth about 0.05 on private.

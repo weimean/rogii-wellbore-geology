@@ -2,7 +2,7 @@
 
 **Task:** predict eval-zone TVT (True Vertical Thickness, ft) for horizontal wells. Metric: pooled RMSE.
 **Best model:** kernel **v32** (`gtwm98/rogii-hmm-fusion`, ref 55166231) — **public 10.424**, fully honest & rules-compliant.
-**Final standing:** private **RMSE 9.673**, rank **3151 / 6191 (top 50.9%)** — counted sub was v29 (see FINAL STANDING below).
+**Final standing:** private **RMSE 9.673**, rank **3116 / 6125 (top 50.9%)** — counted sub was v29 (see FINAL STANDING below).
 **Arc:** ffill 15.91 → 13.288 → 11.020 → 10.852 → 10.699 → 10.565 → **10.424** (−5.49 from ffill), every gain validated on the real LB.
 **Verdict (2026-07-29):** two "honest ceilings" I declared both fell. 11.020 was ARCHITECTURE-POVERTY — a
 TCN reading each well as a SEQUENCE (the learned analogue of a geologist reading the log holistically) broke
@@ -27,8 +27,8 @@ or reproduce it before believing it. 13.52 was feature-poverty, 11.020 was archi
 
 ## FINAL STANDING (competition closed 2026-08-05)
 
-**Team `weimean` — private RMSE 9.673, rank 3151 / 6191 (top 50.9%).** Public was 10.424 / rank 3992 (top 64.5%):
-**the private shakeup moved us up 841 places.** Trusting reproduction and grouped CV over the public LB
+**Team `weimean` — private RMSE 9.673, rank 3116 / 6125 (top 50.9%).** Public was 10.424 / rank 3944 (top 64.4%):
+**the private shakeup moved us up 828 places.** Trusting reproduction and grouped CV over the public LB
 generalised — teams that overfit the public split fell, we rose.
 
 **The counted score is v29 (9.673), not v32.** Kaggle auto-selected the two best *public* subs (v32 10.424 and

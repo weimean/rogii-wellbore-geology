@@ -155,8 +155,8 @@ change (#3 Huber), but a decorrelated spatial FEATURE transfers cleanly (#2). BE
 
 ## POST-REVEAL POST-MORTEM (2026-08-06, competition closed 08-05)
 
-**Final standing: private RMSE 9.673, rank 3151/6191 (top 50.9%).** Public 10.424 → rank 3992 (top 64.5%);
-the private shakeup moved us UP 841 places. Counted sub = v29 (U=TVT+Z projection, private 9.673), not the
+**Final standing: private RMSE 9.673, rank 3116/6125 (top 50.9%).** Public 10.424 → rank 3944 (top 64.4%);
+the private shakeup moved us UP 828 places. Counted sub = v29 (U=TVT+Z projection, private 9.673), not the
 public-best v32 (9.725) — Kaggle kept the better private among the two best public subs, and the v32
 spatial-dip PF turned out to be public overfit (+0.05 private, inside the ~0.07 seed-noise band). Full
 private breakdown table in notes/CONCLUSION.md "FINAL STANDING".
